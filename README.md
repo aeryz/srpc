@@ -1,0 +1,2 @@
+# srpc
+Simple RPC server.
