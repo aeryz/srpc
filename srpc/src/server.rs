@@ -30,6 +30,11 @@ impl Server {
         Ok(())
     }
 
+    pub fn remove_service(&mut self, service: Box<dyn Service>) {
+        self.services.remove(service.get_route());
+    }
+
+    // TODO: Return error if no service exists
     pub fn serve(&self) -> Result<()> {
         use std::io::Read;
         loop {

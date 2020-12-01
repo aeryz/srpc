@@ -62,5 +62,6 @@ fn main() {
     // or
     server.add_service(Box::new(StrService::new()));
     server.add_service(Box::new(NumService::new()));
+    server.remove_service(Box::new(NumService::new()));
     server.serve();
 }
