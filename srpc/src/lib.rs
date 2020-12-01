@@ -1,3 +1,9 @@
+mod server;
+pub use server::Service;
+pub use server::Server;
+
+pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+
 #[cfg(test)]
 mod tests {
     #[test]
