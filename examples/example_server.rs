@@ -1,5 +1,4 @@
-use srpc::Server;
-use srpc::Service;
+use srpc::server::Server;
 
 //#[route = "str-service"]
 struct StrService {
@@ -17,7 +16,11 @@ impl StrService {
     }
 
     fn split_whitespace(data: String) -> Vec<String> {
-        Vec::new()
+        let mut v = Vec::new();
+        for s in data.split_whitespace() {
+            v.push(s.to_owned());
+        }
+        v
     }
 
     fn foo() {
@@ -63,5 +66,7 @@ fn main() {
     server.add_service(Box::new(StrService::new()));
     server.add_service(Box::new(NumService::new()));
     server.remove_service(Box::new(NumService::new()));
-    server.serve();
+    if let Err(e) = server.serve() {
+        println!("Error: {}", e);
+    }
 }
