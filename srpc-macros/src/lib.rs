@@ -5,12 +5,82 @@ use syn::{parse_macro_input};
 use quote::quote;
 
 #[proc_macro_attribute]
+pub fn client(_attrs: TokenStream, input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as syn::ItemTrait);
+    let self_ident = &input.ident;
+    let methods = input.items.iter().map(|item| {
+        if let syn::TraitItem::Method(item_method) = item {
+            let method_args = &item_method.sig.inputs;
+            let method_ident = &item_method.sig.ident;
+            let param_names = method_args.iter().map(|param| {
+                if let syn::FnArg::Typed(param) = param {
+                    &param.pat
+                } else {
+                    panic!("Using 'self' in an RPC call is not allowed for now.");
+                }
+            });
+
+            let return_type = if let syn::ReturnType::Type(_, ret_type) = &item_method.sig.output {
+                Some(ret_type)
+            } else {
+                None
+            };
+
+            if method_args.is_empty() && return_type.is_none() {
+                quote! {
+                    fn #method_ident(client: &mut srpc::client::Client) -> srpc::Result<()> {
+                        let _ = client.call("str-service", stringify!(#method_ident), String::new())?;
+                        Ok(())
+                    }
+                }
+            } else if method_args.is_empty() && return_type.is_some() {
+                let ret_type = return_type.unwrap();
+                quote! {
+                    fn #method_ident(client: &mut srpc::client::Client) -> srpc::Result<#ret_type> {
+                        Ok(serde_json::from_slice(&client.call("str-service", stringify!(#method_ident), String::new())?)?)
+                    }
+                }
+            } else if !method_args.is_empty() && return_type.is_none() {
+                quote! {
+                    fn #method_ident(client: &mut srpc::client::Client, #method_args) -> srpc::Result<()> {
+                        #[derive(serde::Serialize)]
+                        struct Args { #method_args }
+                        let _ = client.call("str-service", stringify!(#method_ident), serde_json::to_string(&Args { #(#param_names,)* })?)?;
+                        Ok(())
+                    }
+                }
+            } else {
+                let ret_type = return_type.unwrap();
+                quote! {
+                    fn #method_ident(client: &mut srpc::client::Client, #method_args) -> srpc::Result<#ret_type> {
+                        #[derive(serde::Serialize)]
+                        struct Args { #method_args }
+                        Ok(serde_json::from_slice(&client.call("str-service", stringify!(#method_ident), serde_json::to_string(&Args { #(#param_names,)* })?)?)?)
+                    }
+                }
+            }
+        } else {
+            panic!("Only methods are allowed in a client");
+        }
+    });
+
+
+    let q = quote! {
+        struct #self_ident;
+        impl #self_ident {
+            #(#methods)*
+        }
+    };
+
+    TokenStream::from(q)
+}
+
+#[proc_macro_attribute]
 pub fn service(_attrs: TokenStream, input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as syn::ItemImpl);
     let self_ident = &input.self_ty;
     let match_arms = input.items.iter().map(|item| {
         if let syn::ImplItem::Method(item_method) = item {
-            assert!(item_method.attrs.is_empty());
             let method_args = &item_method.sig.inputs;
             let method_ident  = &item_method.sig.ident;
 
@@ -19,8 +89,7 @@ pub fn service(_attrs: TokenStream, input: TokenStream) -> TokenStream {
                     // Get identifier of the parameter
                     &param.pat
                 } else {
-                    // TODO: Cool error
-                    panic!("nopee");
+                    panic!("Using 'self' in an RPC call is not allowed for now.");
                 }
             });
 
@@ -71,7 +140,7 @@ pub fn service(_attrs: TokenStream, input: TokenStream) -> TokenStream {
     });
     let q = quote! {
         #input
-        impl Service for #self_ident {
+        impl srpc::server::Service for #self_ident {
             fn call(&self, fn_name: String, args: String) -> srpc::Result<String> {
                 let ret_str = match fn_name.as_str() {
                     #(#match_arms,)*

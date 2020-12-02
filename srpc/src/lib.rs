@@ -1,6 +1,5 @@
-mod server;
-pub use server::Service;
-pub use server::Server;
+pub mod server;
+pub mod client;
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
