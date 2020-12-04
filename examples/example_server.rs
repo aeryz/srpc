@@ -1,15 +1,9 @@
 use srpc::server::Server;
 
-//#[srpc::route = "str-service"]
-struct StrService {
-    route: &'static str
-}
+#[srpc::service(route = "str-service")]
+struct StrService;
 
-impl StrService {
-    fn new() -> Self { Self { route: "str-service" } }
-}
-
-#[srpc::service]
+#[srpc::service_impl]
 impl StrService {
     fn contains(data: String, elem: String) -> bool {
         data.contains(&elem)
@@ -36,26 +30,24 @@ impl StrService {
     }
 }
 
-//#[route = "num-service"]
-struct NumService {
-    route: &'static str,
-}
+#[srpc::service(route = "num-service")]
+struct NumService;
 
-impl NumService {
-    fn new() -> Self { Self { route: "num-service" } }
-}
-
-#[srpc_macros::service]
+#[srpc::service_impl]
 impl NumService {
     fn max(a: i32, b: i32) -> i32 {
-        if a > b { a } else { b }
+        if a > b {
+            a
+        } else {
+            b
+        }
     }
 
     fn factorial(n: u32) -> u32 {
         match n {
             0 => 1,
             1 => 1,
-            n => n * NumService::factorial(n - 1)
+            n => n * NumService::factorial(n - 1),
         }
     }
 }

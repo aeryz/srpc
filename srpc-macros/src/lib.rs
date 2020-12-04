@@ -1,12 +1,68 @@
 extern crate proc_macro;
 
 use proc_macro::TokenStream;
-use syn::{parse_macro_input};
 use quote::quote;
+use syn::parse_macro_input;
+
+fn parse_route(mut attrs: syn::AttributeArgs) -> syn::LitStr {
+    if let syn::NestedMeta::Meta(syn::Meta::NameValue(syn::MetaNameValue {
+        path,
+        lit: syn::Lit::Str(route_name),
+        ..
+    })) = attrs.pop().unwrap()
+    {
+        if path.segments.len() != 1 || path.segments.first().unwrap().ident != "route" {
+            panic!(
+                "'route' attribute is expected only. eg/ #[srpc::service(route = \"cool_route\")]"
+            );
+        }
+        return route_name;
+    } else {
+        panic!("'route' attribute is expected. eg/ #[srpc::service(route = \"cool_route\")]");
+    };
+}
 
 #[proc_macro_attribute]
-pub fn client(_attrs: TokenStream, input: TokenStream) -> TokenStream {
+pub fn service(attrs: TokenStream, input: TokenStream) -> TokenStream {
+    let attrs = parse_macro_input!(attrs as syn::AttributeArgs);
+    let input = parse_macro_input!(input as syn::ItemStruct);
+
+    if !input.fields.is_empty() {
+        panic!("An srpc service struct should be a unit struct.");
+    }
+
+    if attrs.len() != 1 {
+        panic!("Attribute 'route' should be defined. eg/ #[srpc::service(route = \"cool_route\")]");
+    }
+
+    let self_ident = &input.ident;
+
+    let route_name = parse_route(attrs);
+
+    TokenStream::from(quote! {
+        struct #self_ident {
+            route: &'static str
+        }
+
+        impl #self_ident {
+            pub fn new() -> Self {
+                Self { route: #route_name }
+            }
+        }
+    })
+}
+
+#[proc_macro_attribute]
+pub fn client(attrs: TokenStream, input: TokenStream) -> TokenStream {
+    let attrs = parse_macro_input!(attrs as syn::AttributeArgs);
     let input = parse_macro_input!(input as syn::ItemTrait);
+
+    if attrs.len() != 1 {
+        panic!("Expected 'route' attribute only. eg/ #[srpc::client(route = \"cool_route\")]");
+    }
+
+    let route_name = parse_route(attrs);
+
     let self_ident = &input.ident;
     let methods = input.items.iter().map(|item| {
         if let syn::TraitItem::Method(item_method) = item {
@@ -60,14 +116,16 @@ pub fn client(_attrs: TokenStream, input: TokenStream) -> TokenStream {
                 }
             }
         } else {
-            panic!("Only methods are allowed in a client");
+            panic!("Only methods are allowed in an srpc client.");
         }
     });
 
-
     let q = quote! {
-        struct #self_ident;
+        struct #self_ident { route: &'static str }
         impl #self_ident {
+            pub fn new() -> Self {
+                Self { route: #route_name }
+            }
             #(#methods)*
         }
     };
@@ -76,13 +134,13 @@ pub fn client(_attrs: TokenStream, input: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_attribute]
-pub fn service(_attrs: TokenStream, input: TokenStream) -> TokenStream {
+pub fn service_impl(_attrs: TokenStream, input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as syn::ItemImpl);
     let self_ident = &input.self_ty;
     let match_arms = input.items.iter().map(|item| {
         if let syn::ImplItem::Method(item_method) = item {
             let method_args = &item_method.sig.inputs;
-            let method_ident  = &item_method.sig.ident;
+            let method_ident = &item_method.sig.ident;
 
             let param_names = method_args.iter().map(|param| {
                 if let syn::FnArg::Typed(param) = param {
