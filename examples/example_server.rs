@@ -53,12 +53,12 @@ impl NumService {
 }
 
 fn main() {
-    let mut server = Server::new(8080);
+    let mut server = Server::new();
     // or
     server.add_service(Box::new(StrService::new()));
     server.add_service(Box::new(NumService::new()));
     server.remove_service(Box::new(NumService::new()));
-    if let Err(e) = server.serve() {
+    if let Err(e) = server.serve("127.0.0.1:8080") {
         println!("Error: {}", e);
     }
 }

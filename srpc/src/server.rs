@@ -1,31 +1,24 @@
-use std::collections::HashMap;
+use super::protocol::*;
 use super::Result;
-use std::net::TcpListener;
+use std::collections::HashMap;
 use std::io::Write;
+use std::net::TcpListener;
+use std::net::ToSocketAddrs;
 
 pub trait Service {
-    fn call(&self, fn_name: String, args: String) -> Result<String>;
+    fn call<'a>(&self, fn_name: &'a str, args: serde_json::Value) -> Result<serde_json::Value>;
 
     fn get_route(&self) -> &'static str;
 }
 
 pub struct Server {
-    port: u32,
     services: HashMap<&'static str, Box<dyn Service>>,
 }
 
-#[derive(serde::Deserialize)]
-struct Args {
-    route: String,
-    method_name: String,
-    args: String
-}
-
 impl Server {
-    pub fn new(port: u32) -> Self {
+    pub fn new() -> Self {
         Self {
-            port,
-            services: HashMap::new()
+            services: HashMap::new(),
         }
     }
 
@@ -44,18 +37,19 @@ impl Server {
     }
 
     // TODO: Return error if no service exists
-    pub fn serve(&self) -> Result<()> {
+    pub fn serve<A: ToSocketAddrs>(&self, addr: A) -> Result<()> {
         use std::io::Read;
-        let listener = TcpListener::bind("127.0.0.1:8080")?;
+        let listener = TcpListener::bind(addr)?;
         for stream in listener.incoming() {
             println!("Got a connection :)");
             let mut stream = stream?;
             let mut request = vec![0; 1024];
             let n_read = stream.read(&mut request)?;
-            let args: Args = serde_json::from_slice(&request[0..n_read])?;
-            let func = self.services.get(args.route.as_str()).unwrap();
-            let data = func.call(args.method_name, args.args)?;
-            stream.write(data.as_bytes());
+            let req: SrpcRequest<serde_json::Value> = serde_json::from_slice(&request[0..n_read])?;
+            let func = self.services.get(req.route).unwrap();
+            let data = func.call(req.method_name, req.data)?;
+            let response = SrpcResponse::new(StatusCode::SUCCESS, data);
+            stream.write(serde_json::to_string(&response).unwrap().as_bytes())?;
         }
 
         Ok(())

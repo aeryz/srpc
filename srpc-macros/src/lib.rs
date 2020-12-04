@@ -85,7 +85,13 @@ pub fn client(attrs: TokenStream, input: TokenStream) -> TokenStream {
             if method_args.is_empty() && return_type.is_none() {
                 quote! {
                     fn #method_ident(client: &mut srpc::client::Client) -> srpc::Result<()> {
-                        let _ = client.call("str-service", stringify!(#method_ident), String::new())?;
+                        let response: srpc::protocol::SrpcResponse<()> = serde_json::from_slice(&client.call(
+                                srpc::protocol::SrpcRequest::new(
+                                    "str-service", 
+                                    stringify!(#method_ident), 
+                                    ()
+                                ))?)?;
+                        let _ = srpc::utils::throw_if_error(response.status_code)?;
                         Ok(())
                     }
                 }
@@ -93,7 +99,14 @@ pub fn client(attrs: TokenStream, input: TokenStream) -> TokenStream {
                 let ret_type = return_type.unwrap();
                 quote! {
                     fn #method_ident(client: &mut srpc::client::Client) -> srpc::Result<#ret_type> {
-                        Ok(serde_json::from_slice(&client.call("str-service", stringify!(#method_ident), String::new())?)?)
+                        let response: srpc::protocol::SrpcResponse<#ret_type> = serde_json::from_slice(&client.call(
+                                    srpc::protocol::SrpcRequest::new(
+                                        "str-service", 
+                                        stringify!(#method_ident), 
+                                        ()
+                                    ))?)?;
+                        let _ = srpc::utils::throw_if_error(response.status_code)?;
+                        Ok(response.data)
                     }
                 }
             } else if !method_args.is_empty() && return_type.is_none() {
@@ -101,7 +114,13 @@ pub fn client(attrs: TokenStream, input: TokenStream) -> TokenStream {
                     fn #method_ident(client: &mut srpc::client::Client, #method_args) -> srpc::Result<()> {
                         #[derive(serde::Serialize)]
                         struct Args { #method_args }
-                        let _ = client.call("str-service", stringify!(#method_ident), serde_json::to_string(&Args { #(#param_names,)* })?)?;
+                        let response: srpc::protocol::SrpcResponse<()> = serde_json::from_slice(&client.call(
+                            srpc::protocol::SrpcRequest::new(
+                                "str-service", 
+                                stringify!(#method_ident), 
+                                Args { #(#param_names,)* }
+                            ))?)?;
+                        let _ = srpc::utils::throw_if_error(response.status_code)?;
                         Ok(())
                     }
                 }
@@ -111,7 +130,14 @@ pub fn client(attrs: TokenStream, input: TokenStream) -> TokenStream {
                     fn #method_ident(client: &mut srpc::client::Client, #method_args) -> srpc::Result<#ret_type> {
                         #[derive(serde::Serialize)]
                         struct Args { #method_args }
-                        Ok(serde_json::from_slice(&client.call("str-service", stringify!(#method_ident), serde_json::to_string(&Args { #(#param_names,)* })?)?)?)
+                        let response: srpc::protocol::SrpcResponse<#ret_type> = serde_json::from_slice(&client.call(
+                                srpc::protocol::SrpcRequest::new(
+                                        "str-service", 
+                                        stringify!(#method_ident), 
+                                        Args { #(#param_names,)* })
+                                )?)?;
+                        let _ = srpc::utils::throw_if_error(response.status_code)?;
+                        Ok(response.data)
                     }
                 }
             }
@@ -161,13 +187,13 @@ pub fn service_impl(_attrs: TokenStream, input: TokenStream) -> TokenStream {
                 quote! {
                     stringify!(#method_ident) => {
                         #self_ident::#method_ident();
-                        String::new()
+                        serde_json::Value::Null
                     }
                 }
             } else if method_args.is_empty() && return_type.is_some() {
                 quote! {
                     stringify!(#method_ident) => {
-                        serde_json::to_string(&#self_ident::#method_ident())?
+                        serde_json::to_value(&#self_ident::#method_ident())?
                     }
                 }
             } else if !method_args.is_empty() && return_type.is_none() {
@@ -175,10 +201,10 @@ pub fn service_impl(_attrs: TokenStream, input: TokenStream) -> TokenStream {
                 quote! {
                     stringify!(#method_ident) => {
                         #[derive(serde::Deserialize)]
-                        struct Anon { #method_args }; // TODO: Reference problem
-                        let Anon { #(#param_names,)* } = serde_json::from_str(&args)?;
+                        struct Args { #method_args }; // TODO: Reference problem
+                        let Args { #(#param_names,)* } = serde_json::from_value(args)?;
                         #self_ident::#method_ident(#(#param_names_clone,)*);
-                        String::new()
+                        serde_json::Value::Null
                     }
                 }
             } else {
@@ -186,9 +212,9 @@ pub fn service_impl(_attrs: TokenStream, input: TokenStream) -> TokenStream {
                 quote! {
                     stringify!(#method_ident) => {
                         #[derive(serde::Deserialize)]
-                        struct Anon { #method_args }; // TODO: Reference problem
-                        let Anon { #(#param_names,)* } = serde_json::from_str(&args)?;
-                        serde_json::to_string(&#self_ident::#method_ident(#(#param_names_clone,)*))?
+                        struct Args { #method_args }; // TODO: Reference problem
+                        let Args { #(#param_names,)* } = serde_json::from_value(args)?;
+                        serde_json::to_value(&#self_ident::#method_ident(#(#param_names_clone,)*))?
                     }
                 }
             }
@@ -199,8 +225,8 @@ pub fn service_impl(_attrs: TokenStream, input: TokenStream) -> TokenStream {
     let q = quote! {
         #input
         impl srpc::server::Service for #self_ident {
-            fn call(&self, fn_name: String, args: String) -> srpc::Result<String> {
-                let ret_str = match fn_name.as_str() {
+            fn call<'a>(&self, fn_name: &'a str, args: serde_json::Value) -> srpc::Result<serde_json::Value> {
+                let ret_str = match fn_name {
                     #(#match_arms,)*
                     _ => return Err(String::new().into())
                 };
