@@ -1,7 +1,7 @@
 use srpc::client::Client;
 
 //#[route = "str-service"]
-#[srpc_macros::client]
+#[srpc::client]
 trait StrService {
     fn contains(data: String, elem: String) -> bool;
 
@@ -24,7 +24,7 @@ trait NumService {
 
 fn main() {
     let mut client = Client::new("127.0.0.1:8080");
-    match StrService::split_whitespace(&mut client, String::from("hello from haklsim")) {
+    match StrService::split_whitespace(&mut client, String::from("hello from haklsim"))     {
         Ok(res) => println!("{:?}", res),
         Err(e) => println!("Error {}", e),
     }

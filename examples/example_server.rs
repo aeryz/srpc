@@ -1,6 +1,6 @@
 use srpc::server::Server;
 
-//#[route = "str-service"]
+//#[srpc::route = "str-service"]
 struct StrService {
     route: &'static str
 }
@@ -9,7 +9,7 @@ impl StrService {
     fn new() -> Self { Self { route: "str-service" } }
 }
 
-#[srpc_macros::service]
+#[srpc::service]
 impl StrService {
     fn contains(data: String, elem: String) -> bool {
         data.contains(&elem)
