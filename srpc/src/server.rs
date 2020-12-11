@@ -1,9 +1,12 @@
 use super::protocol::*;
 use super::Result;
+use crate::json_rpc::*;
+use crate::transport::*;
 use std::collections::HashMap;
-use std::io::Write;
-use std::net::TcpListener;
-use std::net::ToSocketAddrs;
+use std::convert::TryFrom;
+use tokio::{io::AsyncReadExt, net::TcpStream};
+use tokio::{net::TcpListener, sync::mpsc::channel};
+use tokio::{net::ToSocketAddrs, sync::mpsc::Sender};
 
 pub trait Service {
     fn call<'a>(&self, fn_name: &'a str, args: serde_json::Value) -> Result<serde_json::Value>;
@@ -22,36 +25,70 @@ impl Server {
         }
     }
 
-    pub fn add_service(&mut self, service: Box<dyn Service>) -> Result<()> {
+    pub fn add_service(&mut self, service: Box<dyn Service>) {
         if self.services.contains_key(service.get_route()) {
-            return Err(String::new().into());
+            return;
         }
 
         let route = service.get_route();
         self.services.insert(route, service);
-        Ok(())
     }
 
     pub fn remove_service(&mut self, service: Box<dyn Service>) {
         self.services.remove(service.get_route());
     }
 
-    // TODO: Return error if no service exists
-    pub fn serve<A: ToSocketAddrs>(&self, addr: A) -> Result<()> {
-        use std::io::Read;
-        let listener = TcpListener::bind(addr)?;
-        for stream in listener.incoming() {
-            println!("Got a connection :)");
-            let mut stream = stream?;
-            let mut request = vec![0; 1024];
-            let n_read = stream.read(&mut request)?;
-            let req: SrpcRequest<serde_json::Value> = serde_json::from_slice(&request[0..n_read])?;
-            let func = self.services.get(req.route).unwrap();
-            let data = func.call(req.method_name, req.data)?;
-            let response = SrpcResponse::new(StatusCode::SUCCESS, data);
-            stream.write(serde_json::to_string(&response).unwrap().as_bytes())?;
-        }
+    async fn handle_request<'a>(mut stream: TcpStream, tx: Sender<TransportData<TcpStream>>) {
+        let mut total_data = Vec::new();
 
-        Ok(())
+        loop {
+            let mut data = [0 as u8; 1024];
+            match stream.read(&mut data).await.unwrap() {
+                0 => break,
+                n => total_data.extend_from_slice(&data[0..n]),
+            }
+            if total_data.len() > 1
+                && total_data[total_data.len() - 1] == b'\n'
+                && total_data[total_data.len() - 2] == b'\r'
+            {
+                total_data.resize(total_data.len() - 2, 0);
+                break;
+            }
+        }
+        match Request::try_from(total_data.as_slice()) {
+            Ok(request) => println!("{:?}", request),
+            Err(e) => {
+                let d = serde_json::to_vec(&e).unwrap();
+                let data = TransportData { stream, data: d };
+                let _ = tx.send(data).await;
+            }
+        }
+    }
+
+    // TODO: Return error if no service exists
+    pub async fn serve<A: ToSocketAddrs>(&self, addr: A) {
+        let listener = TcpListener::bind(addr).await.unwrap();
+
+        let (tx, rx) = channel(32);
+        let mut transport = Transport { receiver: rx };
+
+        tokio::spawn(async move {
+            transport.listen().await;
+        });
+
+        loop {
+            let (stream, _) = listener.accept().await.unwrap();
+            let tx2 = tx.clone();
+            tokio::spawn(Self::handle_request(stream, tx2));
+            /*
+            let req: SrpcRequest<serde_json::Value> = serde_json::from_slice(&total_data).unwrap();
+            let func = self.services.get(req.route).unwrap();
+            let data = func.call(req.method_name, req.data).unwrap();
+            let response = SrpcResponse::new(StatusCode::SUCCESS, data);
+            stream
+                .write(serde_json::to_string(&response).unwrap().as_bytes())
+                .unwrap();
+            */
+        }
     }
 }

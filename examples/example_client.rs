@@ -20,8 +20,10 @@ trait NumService {
 
 fn main() {
     let mut client = Client::new("127.0.0.1:8080");
-    match StrService::split_whitespace(&mut client, String::from("hello from haklsim")) {
-        Ok(res) => println!("{:?}", res),
-        Err(e) => println!("Error {}", e),
-    }
+    client.call2(true);
+    client.call2(false);
+    /*
+    let res = StrService::split_whitespace(&mut client, String::from("hello from haksim"));
+    println!("{:?}", res);
+    */
 }

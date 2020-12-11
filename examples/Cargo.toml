@@ -17,3 +17,7 @@ path = "example_server.rs"
 [[example]]
 name = "client"
 path = "example_client.rs"
+
+[[example]]
+name = "t"
+path = "trash.rs"
