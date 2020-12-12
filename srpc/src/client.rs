@@ -1,3 +1,5 @@
+use crate::json_rpc::{Request, RpcId};
+
 use super::protocol::*;
 use super::Result;
 use serde::Serialize;
@@ -24,28 +26,29 @@ impl Client {
     }
 
     pub fn call2(&mut self, test: bool) {
+        let req = Request {
+            jsonrpc: "2.0".to_owned(),
+            route: "str-service".to_owned(),
+            method: "".to_owned(),
+            params: serde_json::Value::Null,
+            id: Some(RpcId::Number(1)),
+        };
         let mut connection = TcpStream::connect("localhost:8080").unwrap();
         let msg = "
             {
                 \"jsonrpc\": \"2.0\",
-                \"method\": \"\",
-                \"params\": \"\"
-            }\r\n";
-        let msg2 = "
-            {
-                \"jsonrpc\": \"2.0\",
-                \"method\": \"\",
-                \"sparams\": \"\"
+                \"route\": \"str-service\",
+                \"method\": \"split_whitespace\",
+                \"params\": {
+                    \"data\": \"Hello from haksim\"
+                },
+                \"id\": 1
             }\r\n";
 
-        if test {
-            connection.write(msg.as_bytes()).unwrap();
-        } else {
-            connection.write(msg2.as_bytes()).unwrap();
-            let mut resp = vec![0; 1024];
-            let n_read = connection.read(&mut resp).unwrap();
-            resp.resize(n_read, 0);
-            println!("{}", String::from_utf8(resp).unwrap());
-        }
+        connection.write(msg.as_bytes()).unwrap();
+        let mut resp = vec![0; 1024];
+        let n_read = connection.read(&mut resp).unwrap();
+        resp.resize(n_read, 0);
+        println!("{}", String::from_utf8(resp).unwrap());
     }
 }

@@ -3,8 +3,9 @@ use std::convert::TryFrom;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-#[derive(Debug, Serialize, Deserialize)]
-enum RpcId {
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum RpcId {
     Str(String),
     Number(i32),
 }
@@ -17,19 +18,22 @@ pub struct RpcError {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Request {
-    jsonrpc: String,
-    method: String,
-    params: Value,
-    id: Option<RpcId>,
+    pub jsonrpc: String,
+    pub route: String,
+    pub method: String,
+    pub params: Value,
+    pub id: Option<RpcId>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Response {
-    jsonrpc: String,
-    result: Option<Value>,
-    error: Option<RpcError>,
-    id: RpcId,
+    pub jsonrpc: String,
+    pub result: Option<Value>,
+    pub error: Option<RpcError>,
+    pub id: RpcId,
 }
 
 impl TryFrom<&[u8]> for Request {
