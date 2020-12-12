@@ -1,11 +1,10 @@
 pub mod client;
 pub mod json_rpc;
-pub mod protocol;
 pub mod server;
 pub mod transport;
 pub mod utils;
 
-pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 pub use srpc_macros::*;
 

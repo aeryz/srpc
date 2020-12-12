@@ -1,8 +1,3 @@
-use crate::json_rpc::{Request, RpcId};
-
-use super::protocol::*;
-use super::Result;
-use serde::Serialize;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 
@@ -13,26 +8,7 @@ impl Client {
         Self
     }
 
-    pub fn call<'a, Req: Serialize>(&mut self, request: SrpcRequest<Req>) -> Result<Vec<u8>> {
-        let mut connection = TcpStream::connect("localhost:8080")?;
-        let msg = serde_json::to_vec(&request)?;
-        connection.write(&msg)?;
-        let mut resp = vec![0; 1024];
-        let n_read = connection.read(&mut resp)?;
-        println!("Read: {} bytes", n_read);
-        resp.resize(n_read, 0);
-
-        Ok(resp)
-    }
-
-    pub fn call2(&mut self, test: bool) {
-        let req = Request {
-            jsonrpc: "2.0".to_owned(),
-            route: "str-service".to_owned(),
-            method: "".to_owned(),
-            params: serde_json::Value::Null,
-            id: Some(RpcId::Number(1)),
-        };
+    pub fn call(&mut self) {
         let mut connection = TcpStream::connect("localhost:8080").unwrap();
         let msg = "
             {

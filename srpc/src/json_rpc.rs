@@ -2,6 +2,7 @@ use std::convert::TryFrom;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::error::Error;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -35,6 +36,43 @@ pub struct Response {
     pub error: Option<RpcError>,
     pub id: RpcId,
 }
+
+impl Response {
+    pub fn new(result: Option<Value>, error: Option<RpcError>, id: RpcId) -> Self {
+        Response {
+            jsonrpc: "2.0".to_owned(),
+            result,
+            error,
+            id,
+        }
+    }
+
+    pub fn new_error(error: RpcError, id: RpcId) -> Self {
+        Response {
+            jsonrpc: "2.0".to_owned(),
+            result: None,
+            error: Some(error),
+            id,
+        }
+    }
+
+    pub fn new_result(result: Value, id: RpcId) -> Self {
+        Response {
+            jsonrpc: "2.0".to_owned(),
+            result: Some(result),
+            error: None,
+            id,
+        }
+    }
+}
+
+impl std::fmt::Display for RpcError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Rpc error occured!")
+    }
+}
+
+impl Error for RpcError {}
 
 impl TryFrom<&[u8]> for Request {
     type Error = RpcError;
