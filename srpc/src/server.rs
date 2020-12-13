@@ -13,9 +13,15 @@ type DynService = Box<dyn Service + Send + Sync>;
 type ServiceMap = Arc<Mutex<HashMap<&'static str, DynService>>>;
 type TMutex<T> = tokio::sync::Mutex<T>;
 
+/// This trait is auto-implemented by the 'service_impl' macro.
 pub trait Service {
+    /// Calls the appropriate rpc function and returns its value as `serde_json::Value`
+    ///
+    /// # Errors
+    /// TODO
     fn call(&self, fn_name: &str, args: serde_json::Value) -> Result<serde_json::Value>;
 
+    /// Returns the route to the service. Specified by the 'route' macro attribute.
     fn get_route(&self) -> &'static str;
 }
 
@@ -62,8 +68,7 @@ impl Server {
             utils::send_error_response(
                 sender,
                 stream,
-                RpcErrorCode::METHOD_NOT_FOUND,
-                "Route not found".to_owned(),
+                ErrorKind::MethodNotFound,
                 None,
                 request.id.clone().unwrap(),
             )
@@ -92,8 +97,7 @@ impl Server {
                         utils::send_error_response(
                             sender,
                             stream,
-                            RpcErrorCode::INTERNAL_ERRORS,
-                            "Internal error".to_owned(),
+                            ErrorKind::InternalError,
                             None,
                             request.id.clone().unwrap(),
                         )
@@ -104,15 +108,17 @@ impl Server {
         }
     }
 
+    /// Handles a single connection. For each request, it spawns a handler task.
+    /// For now, it just indefinetely waits for incoming data.
+    /// TODO: Timeouts should be supported.
     pub async fn handle_connection(services: ServiceMap, stream: TcpStream) {
+        // TODO: Channel should be unbounded.
         let (tx, rx) = channel(32);
 
         tokio::spawn(async move {
             let mut transport = Transport::new(rx);
             transport.listen().await;
         });
-
-        println!("Handling connection");
 
         let (read_half, write_half) = tokio::io::split(stream);
 
@@ -139,6 +145,9 @@ impl Server {
         }
     }
 
+    /// Serves services from a TcpStream for now, it should accept all kind of type
+    /// which implements the Stream trait and the other necessary traits.
+    /// When a new connection is accepted, it spawns a task to handle that connection.
     pub async fn serve<A: ToSocketAddrs>(&self, addr: A) {
         let listener = TcpListener::bind(addr).await.unwrap();
 
