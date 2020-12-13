@@ -14,7 +14,7 @@ pub enum Version {
     V2,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, Serialize, PartialEq)]
 #[serde(untagged)]
 pub enum Id {
     Str(String),
