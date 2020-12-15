@@ -20,8 +20,8 @@ pub enum ErrorKind {
 // }
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Error {
-    kind: ErrorKind,
-    data: Option<Value>,
+    pub kind: ErrorKind,
+    pub data: Option<Value>,
 }
 
 impl Error {

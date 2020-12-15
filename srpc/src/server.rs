@@ -113,6 +113,7 @@ impl Server {
     /// TODO: Timeouts should be supported.
     pub async fn handle_connection(services: ServiceMap, stream: TcpStream) {
         // TODO: Channel should be unbounded.
+        println!("Handling connection");
         let (tx, rx) = channel(32);
 
         tokio::spawn(async move {
@@ -140,7 +141,10 @@ impl Server {
                         tx.clone(),
                     ));
                 }
-                Err(_) => return,
+                Err(e) => {
+                    eprintln!("{:?}", e.data);
+                    return;
+                }
             }
         }
     }
@@ -149,7 +153,7 @@ impl Server {
     /// which implements the Stream trait and the other necessary traits.
     /// When a new connection is accepted, it spawns a task to handle that connection.
     pub async fn serve<A: ToSocketAddrs>(&self, addr: A) {
-        let listener = TcpListener::bind(addr).await.unwrap();
+        let mut listener = TcpListener::bind(addr).await.unwrap();
 
         loop {
             let (stream, _) = listener.accept().await.unwrap();

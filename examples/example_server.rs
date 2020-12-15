@@ -17,12 +17,12 @@ impl StrService {
         v
     }
 
-    fn foo() {
-        println!("Hgeloo");
+    fn foo(data: i32) -> i32 {
+        5 + data
     }
 
-    fn bar() -> () {
-        println!("asd");
+    fn bar(data: i32) -> i32 {
+        6 + data
     }
 
     fn no_args() -> String {

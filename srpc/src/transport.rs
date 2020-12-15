@@ -42,8 +42,9 @@ where
 
     pub async fn listen(&mut self) {
         while let Some(data) = self.receiver.recv().await {
+            println!("Came to transport");
             let mut start_pos = 0;
-            let data_len = data.data.len();
+            let mut data_len = 5;
             while let Ok(n) = data
                 .stream
                 .lock()
@@ -51,8 +52,13 @@ where
                 .write(&data.data[start_pos..data_len])
                 .await
             {
+                println!("Wrote {} bytes", n);
                 if n == 0 {
                     break;
+                }
+                data_len += 5;
+                if data_len > data.data.len() {
+                    data_len = data.data.len();
                 }
                 start_pos += n;
             }

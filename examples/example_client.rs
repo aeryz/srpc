@@ -1,6 +1,7 @@
-use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4};
 
 use srpc::{client::Client, json_rpc::Request};
+use std::convert::TryFrom;
 
 //#[srpc::client(route = "str-service")]
 trait StrService {
@@ -28,9 +29,24 @@ async fn main() {
             \"route\": \"test\",
             \"method\": \"foo\",
             \"params\": { \"data\": 1 },
-            \"id\": 1,
+            \"id\": 1
         }\r\n";
 
+    let client = Client::new(SocketAddr::new(
+        IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+        8080,
+    ))
+    .await;
+
+    let r1 = Request::try_from(msg.as_bytes()).unwrap();
+    let mut r2 = Request::try_from(msg.as_bytes()).unwrap();
+    r2.method = String::from("bar");
+
+    let f1 = client.call(r1);
+    let f2 = client.call(r2);
+
+    let (first, second) = tokio::join!(f1, f2);
+    println!("{:?} {:?}", first, second);
     /*
     let res = StrService::split_whitespace(&mut client, String::from("hello from haksim"));
     println!("{:?}", res);
