@@ -9,6 +9,8 @@ tokio = { version = "0.3.0", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 srpc = { version = "0.1", path = "../srpc" }
+bytes = "0.6"
+rand = "0.7"
 
 [[example]]
 name = "server"
@@ -21,3 +23,7 @@ path = "example_client.rs"
 [[example]]
 name = "t"
 path = "trash.rs"
+
+[[example]]
+name = "codec"
+path = "simple_codec.rs"
