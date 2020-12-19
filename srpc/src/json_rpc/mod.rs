@@ -20,3 +20,5 @@ pub enum Id {
     Str(String),
     Num(u32),
 }
+
+unsafe impl Send for Id {}

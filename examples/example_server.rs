@@ -1,6 +1,6 @@
 use srpc::server::Server;
 
-#[srpc::service(route = "str-service")]
+#[srpc::service(route = "test")]
 struct StrService;
 
 #[srpc::service_impl]

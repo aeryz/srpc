@@ -38,7 +38,6 @@ where
         self.state = State::OnBody(usize::from_le_bytes(
             (&self.bytes.as_ref()[0..HEADER_LEN]).try_into().unwrap(),
         ));
-        println!("{:?}", self.state);
         self.parse_body()
     }
 

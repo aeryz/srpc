@@ -1,7 +1,8 @@
 use super::Result;
 use crate::json_rpc::*;
-use crate::transport::writer::{self, Writer};
+use crate::transport::Reader;
 use crate::utils;
+use futures::stream::StreamExt;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::{Arc, Mutex};
@@ -54,9 +55,9 @@ impl Server {
         stream: Arc<TMutex<T>>,
         request: Request,
         services: ServiceMap,
-        sender: Sender<writer::Data<T>>,
+        sender: Sender<super::Data<T>>,
     ) {
-        println!("Handling request");
+        println!("Handling requesttttttt");
         if !services
             .lock()
             .unwrap()
@@ -117,23 +118,18 @@ impl Server {
         let (tx, rx) = channel(32);
 
         tokio::spawn(async move {
-            let mut transport = Writer::new(rx);
-            transport.write_incoming().await;
+            utils::write(rx).await;
         });
 
         let (read_half, write_half) = tokio::io::split(stream);
 
-        let read_half = Arc::new(TMutex::new(read_half));
         let write_half = Arc::new(TMutex::new(write_half));
 
+        let mut reader = Reader::new(read_half);
+
         loop {
-            match Request::try_from(
-                utils::read_frame(read_half.clone())
-                    .await
-                    .unwrap()
-                    .as_slice(),
-            ) {
-                Ok(request) => {
+            match reader.next().await {
+                Some(Ok(request)) => {
                     tokio::spawn(Self::handle_request(
                         write_half.clone(),
                         request,
@@ -141,8 +137,8 @@ impl Server {
                         tx.clone(),
                     ));
                 }
-                Err(e) => {
-                    eprintln!("{:?}", e.data);
+                e => {
+                    eprintln!("{:?}", e);
                     return;
                 }
             }

@@ -33,6 +33,7 @@ where
     }
 
     pub fn extend(&mut self, data: &[u8]) {
+        println!("herererer");
         self.bytes.put(data);
         loop {
             if let None = match self.state {
@@ -45,6 +46,7 @@ where
     }
 
     pub fn drain(&mut self) -> Option<Result<T>> {
+        println!("PARSED REQ LEN: {}", self.parsed_buf.len());
         self.parsed_buf.pop_front()
     }
 
