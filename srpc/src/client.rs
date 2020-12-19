@@ -1,121 +1,112 @@
-use crate::utils;
-use crate::{json_rpc::*, transport::*};
-use std::convert::TryFrom;
+use crate::{
+    json_rpc::*,
+    transport::{reader::Reader, writer::PersistantWriter},
+};
+use futures::stream::StreamExt;
+use std::collections::VecDeque;
 use std::net::SocketAddr;
+use std::net::TcpStream;
 use std::sync::Arc;
+use std::sync::Condvar;
+use std::sync::Mutex;
 use std::{collections::HashMap, time::Duration};
-use tokio::io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf};
-use tokio::net::TcpStream;
-use tokio::sync::Mutex;
-use tokio::sync::{mpsc, oneshot};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadHalf, WriteHalf};
+use tokio::sync::oneshot;
 
-type RequestTable = Arc<Mutex<HashMap<Id, oneshot::Sender<Response>>>>;
-
-pub struct Connection {
-    read_end: Arc<Mutex<ReadHalf<TcpStream>>>,
-    write_end: Arc<Mutex<WriteHalf<TcpStream>>>,
-}
+type RequestTable = Mutex<HashMap<Id, oneshot::Sender<Response>>>;
+type ReaderType = Reader<Response, ReadHalf<TcpStream>>;
+type WriterType = PersistantWriter<WriteHalf<TcpStream>>;
+type RequestQueue = Mutex<VecDeque<Vec<u8>>>;
+type RequestCond = (Mutex<usize>, Condvar);
 
 pub struct Client {
-    connection: Arc<Mutex<Option<Connection>>>,
     service_addr: SocketAddr,
-    requests: RequestTable,
-    sender: mpsc::Sender<TransportData<WriteHalf<TcpStream>>>,
+    req_table: RequestTable,
+    req_queue: RequestQueue,
+    req_cond: RequestCond,
 }
 
 impl Client {
-    pub async fn new(service_addr: SocketAddr) -> Self {
-        let (tx, rx) = mpsc::channel(32);
-        let requests = Arc::new(Mutex::new(HashMap::new()));
-
-        tokio::spawn(async move {
-            let mut transport: Transport<WriteHalf<TcpStream>> = Transport::new(rx);
-            transport.listen().await;
+    pub fn new(service_addr: SocketAddr) -> Arc<Self> {
+        let client = Arc::new(Self {
+            service_addr,
+            req_table: Mutex::new(HashMap::new()),
+            req_queue: Mutex::new(VecDeque::new()),
+            req_cond: (Mutex::new(0), Condvar::new()),
         });
 
-        Self {
-            connection: Arc::new(Mutex::new(None)),
-            service_addr,
-            requests: requests.clone(),
-            sender: tx,
-        }
+        let client_clone = client.clone();
+        std::thread::spawn(move || client_clone.handle_connection());
+        client
     }
 
-    async fn reader<T: AsyncReadExt + Unpin>(requests: RequestTable, reader: Arc<Mutex<T>>) {
-        println!("Reader is ready");
-        while let Ok(res) = utils::read_frame(reader.clone()).await {
-            println!("Read: {}", String::from_utf8(res.clone()).unwrap());
-            let res = Response::try_from(res.as_slice()).unwrap();
-            let mut requests = requests.lock().await;
-            if let Some(sender) = requests.remove(&res.id) {
-                let _ = sender.send(res);
+    async fn reader<R: AsyncRead + Unpin>(&self, r: R) {
+        let mut reader: Reader<Response, R> = Reader::new(r);
+        while let Some(data) = reader.next().await {
+            if let Ok(res) = data {
+                //println!("Read: {}", String::from_utf8(res.clone()).unwrap());
+                let mut req_table = self.req_table.lock().unwrap();
+                if let Some(sender) = req_table.remove(&res.id) {
+                    let _ = sender.send(res);
+                }
             }
         }
     }
 
-    async fn connect(&self) {
-        let mut connection = self.connection.lock().await;
-        if connection.is_some() {
-            println!("Reusing connection");
-            return;
-        }
-
+    async fn writer<W: AsyncWrite + Unpin>(&self, mut writer: W) {
         loop {
-            match TcpStream::connect(self.service_addr).await {
-                Ok(conn) => {
-                    let (r, w) = tokio::io::split(conn);
-                    *connection = Some(Connection {
-                        read_end: Arc::new(Mutex::new(r)),
-                        write_end: Arc::new(Mutex::new(w)),
-                    });
-                    tokio::spawn(Client::reader(
-                        self.requests.clone(),
-                        connection.as_ref().unwrap().read_end.clone(),
-                    ));
+            let (lock, cvar) = &self.req_cond;
+            {
+                let mut not_empty = lock.lock().unwrap();
+                while *not_empty == 0 {
+                    not_empty = cvar.wait(not_empty).unwrap();
+                }
+            }
+            let mut start_pos = 0;
+            let data = self.req_queue.lock().unwrap().pop_back().unwrap();
+            let data_len = data.len();
+            while let Ok(n) = writer.write(&data[start_pos..data_len]).await {
+                if n == 0 {
                     break;
                 }
-                Err(e) => {
-                    eprintln!("Error occured: {}", e);
-                    std::thread::sleep(Duration::new(1, 0));
-                }
+                start_pos += n;
             }
         }
     }
 
-    pub async fn call(&self, mut request: Request) -> Result<Response, ()> {
-        self.connect().await;
+    fn handle_connection(self: Arc<Self>) {
+        match TcpStream::connect(self.service_addr) {
+            Ok(conn) => {
+                let (r, w) = tokio::io::split(conn);
+                tokio::join!(self.reader(r), self.writer(w));
+            }
+            Err(e) => {
+                println!("Connection error: {}", e);
+                std::thread::sleep(Duration::from_secs(1));
+            }
+        }
+    }
 
-        let sender = self.sender.clone();
+    pub async fn call(self: Arc<Self>, mut request: Request) -> Result<Response, ()> {
         request.id = Some(Id::Num(rand::random::<u32>()));
         let (tx, rx) = oneshot::channel();
-
         let res = tokio::spawn(rx);
 
-        self.requests
+        self.req_table
             .lock()
-            .await
+            .unwrap()
             .insert(request.id.clone().unwrap(), tx);
 
         let mut data_to_send = serde_json::to_vec(&request).unwrap();
         data_to_send.push(b'\r');
         data_to_send.push(b'\n');
 
-        let send_res = sender
-            .send(TransportData::new(
-                self.connection
-                    .lock()
-                    .await
-                    .as_ref()
-                    .unwrap()
-                    .write_end
-                    .clone(),
-                data_to_send,
-            ))
-            .await;
+        let mut req_queue = self.req_queue.lock().unwrap();
+        req_queue.push_back(data_to_send);
 
-        if send_res.is_err() {
-            return Err(());
-        }
+        let (lock, cvar) = &self.req_cond;
+        *lock.lock().unwrap() = req_queue.len();
+        cvar.notify_one();
 
         match res.await {
             Ok(res) => res.map_err(|_| ()),

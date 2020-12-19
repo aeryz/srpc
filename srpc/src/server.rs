@@ -1,6 +1,6 @@
 use super::Result;
 use crate::json_rpc::*;
-use crate::transport::*;
+use crate::transport::writer::{self, Writer};
 use crate::utils;
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -54,7 +54,7 @@ impl Server {
         stream: Arc<TMutex<T>>,
         request: Request,
         services: ServiceMap,
-        sender: Sender<TransportData<T>>,
+        sender: Sender<writer::Data<T>>,
     ) {
         println!("Handling request");
         if !services
@@ -117,8 +117,8 @@ impl Server {
         let (tx, rx) = channel(32);
 
         tokio::spawn(async move {
-            let mut transport = Transport::new(rx);
-            transport.listen().await;
+            let mut transport = Writer::new(rx);
+            transport.write_incoming().await;
         });
 
         let (read_half, write_half) = tokio::io::split(stream);
@@ -153,7 +153,7 @@ impl Server {
     /// which implements the Stream trait and the other necessary traits.
     /// When a new connection is accepted, it spawns a task to handle that connection.
     pub async fn serve<A: ToSocketAddrs>(&self, addr: A) {
-        let mut listener = TcpListener::bind(addr).await.unwrap();
+        let listener = TcpListener::bind(addr).await.unwrap();
 
         loop {
             let (stream, _) = listener.accept().await.unwrap();

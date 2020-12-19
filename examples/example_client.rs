@@ -21,6 +21,7 @@ trait NumService {
     fn factorial(n: u32) -> u32;
 }
 
+use std::sync::Arc;
 #[tokio::main]
 async fn main() {
     let msg = "
@@ -35,15 +36,14 @@ async fn main() {
     let client = Client::new(SocketAddr::new(
         IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
         8080,
-    ))
-    .await;
+    ));
 
     let r1 = Request::try_from(msg.as_bytes()).unwrap();
     let mut r2 = Request::try_from(msg.as_bytes()).unwrap();
     r2.method = String::from("bar");
 
-    let f1 = client.call(r1);
-    let f2 = client.call(r2);
+    let f1 = client.clone().call(r1);
+    let f2 = client.clone().call(r2);
 
     let (first, second) = tokio::join!(f1, f2);
     println!("{:?} {:?}", first, second);

@@ -1,4 +1,4 @@
-use crate::{json_rpc::*, transport::TransportData};
+use crate::{json_rpc::*, transport::writer};
 
 use super::Result;
 
@@ -56,7 +56,7 @@ pub async fn read_frame2<T: AsyncReadExt + Unpin>(stream: &mut T) -> Result<Vec<
 }
 
 pub async fn send_error_response<T: AsyncWrite + Unpin>(
-    sender: Sender<TransportData<T>>,
+    sender: Sender<writer::Data<T>>,
     stream: Arc<Mutex<T>>,
     error_kind: ErrorKind,
     error_data: Option<serde_json::Value>,
@@ -65,11 +65,11 @@ pub async fn send_error_response<T: AsyncWrite + Unpin>(
     let mut err = serde_json::to_vec(&Response::new_error(error_kind, error_data, rpc_id)).unwrap();
     err.push(b'\r');
     err.push(b'\n');
-    let _ = sender.send(TransportData::new(stream.clone(), err)).await;
+    let _ = sender.send(writer::Data::new(stream.clone(), err)).await;
 }
 
 pub async fn send_result_response<T: AsyncWrite + Unpin>(
-    sender: Sender<TransportData<T>>,
+    sender: Sender<writer::Data<T>>,
     stream: Arc<Mutex<T>>,
     result: serde_json::Value,
     rpc_id: Id,
@@ -77,5 +77,5 @@ pub async fn send_result_response<T: AsyncWrite + Unpin>(
     let mut res = serde_json::to_vec(&Response::new_result(result, rpc_id)).unwrap();
     res.push(b'\r');
     res.push(b'\n');
-    let _ = sender.send(TransportData::new(stream.clone(), res)).await;
+    let _ = sender.send(writer::Data::new(stream.clone(), res)).await;
 }
