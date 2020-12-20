@@ -23,36 +23,6 @@ fn parse_route(mut attrs: syn::AttributeArgs) -> syn::LitStr {
 }
 
 #[proc_macro_attribute]
-pub fn service(attrs: TokenStream, input: TokenStream) -> TokenStream {
-    let attrs = parse_macro_input!(attrs as syn::AttributeArgs);
-    let input = parse_macro_input!(input as syn::ItemStruct);
-
-    if !input.fields.is_empty() {
-        panic!("An srpc service struct should be a unit struct.");
-    }
-
-    if attrs.len() != 1 {
-        panic!("Attribute 'route' should be defined. eg/ #[srpc::service(route = \"cool_route\")]");
-    }
-
-    let self_ident = &input.ident;
-
-    let route_name = parse_route(attrs);
-
-    TokenStream::from(quote! {
-        struct #self_ident {
-            route: &'static str
-        }
-
-        impl #self_ident {
-            pub fn new() -> Self {
-                Self { route: #route_name }
-            }
-        }
-    })
-}
-
-#[proc_macro_attribute]
 pub fn client(attrs: TokenStream, input: TokenStream) -> TokenStream {
     let attrs = parse_macro_input!(attrs as syn::AttributeArgs);
     let input = parse_macro_input!(input as syn::ItemTrait);
@@ -193,7 +163,7 @@ pub fn service_impl(_attrs: TokenStream, input: TokenStream) -> TokenStream {
             } else if method_args.is_empty() && return_type.is_some() {
                 quote! {
                     stringify!(#method_ident) => {
-                        serde_json::to_value(&#self_ident::#method_ident())?
+                        serde_json::to_value(&#self_ident::#method_ident().await)?
                     }
                 }
             } else if !method_args.is_empty() && return_type.is_none() {
@@ -203,7 +173,7 @@ pub fn service_impl(_attrs: TokenStream, input: TokenStream) -> TokenStream {
                         #[derive(serde::Deserialize)]
                         struct Args { #method_args }; // TODO: Reference problem
                         let Args { #(#param_names,)* } = serde_json::from_value(args)?;
-                        #self_ident::#method_ident(#(#param_names_clone,)*);
+                        #self_ident::#method_ident(#(#param_names_clone,)*).await;
                         serde_json::Value::Null
                     }
                 }
@@ -214,7 +184,7 @@ pub fn service_impl(_attrs: TokenStream, input: TokenStream) -> TokenStream {
                         #[derive(serde::Deserialize)]
                         struct Args { #method_args }; // TODO: Reference problem
                         let Args { #(#param_names,)* } = serde_json::from_value(args)?;
-                        serde_json::to_value(&#self_ident::#method_ident(#(#param_names_clone,)*))?
+                        serde_json::to_value(&#self_ident::#method_ident(#(#param_names_clone,)*).await)?
                     }
                 }
             }
@@ -225,16 +195,14 @@ pub fn service_impl(_attrs: TokenStream, input: TokenStream) -> TokenStream {
     let q = quote! {
         #input
         impl srpc::server::Service for #self_ident {
-            fn call<'a>(&self, fn_name: &'a str, args: serde_json::Value) -> srpc::Result<serde_json::Value> {
-                let ret_str = match fn_name {
+            async fn call(fn_name: String, args: serde_json::Value) -> srpc::Result<serde_json::Value> {
+                let ret_str = match fn_name.as_str() {
                     #(#match_arms,)*
                     _ => return Err(String::new().into())
                 };
 
                 Ok(ret_str)
             }
-
-            fn get_route(&self) -> &'static str { return self.route }
         }
     };
 

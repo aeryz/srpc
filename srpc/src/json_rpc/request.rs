@@ -8,7 +8,6 @@ use std::convert::TryFrom;
 pub struct Request {
     pub jsonrpc: Version,
     pub route: String,
-    pub method: String,
     pub params: Value,
     pub id: Option<Id>,
 }
@@ -26,21 +25,19 @@ impl TryFrom<&[u8]> for Request {
 }
 
 impl Request {
-    pub fn new_call(route: String, method: String, params: Value, id: Id) -> Self {
+    pub fn new_call(route: String, params: Value, id: Id) -> Self {
         Self {
             jsonrpc: Version::V2,
             route,
-            method,
             params,
             id: Some(id),
         }
     }
 
-    pub fn new_notif(route: String, method: String, params: Value) -> Self {
+    pub fn new_notif(route: String, params: Value) -> Self {
         Self {
             jsonrpc: Version::V2,
             route,
-            method,
             params,
             id: None,
         }

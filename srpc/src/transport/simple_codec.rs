@@ -33,7 +33,6 @@ where
     }
 
     pub fn extend(&mut self, data: &[u8]) {
-        println!("herererer");
         self.bytes.put(data);
         loop {
             if let None = match self.state {

@@ -1,15 +1,14 @@
 use srpc::server::Server;
 
-#[srpc::service(route = "test")]
 struct StrService;
 
 #[srpc::service_impl]
 impl StrService {
-    fn contains(data: String, elem: String) -> bool {
+    async fn contains(data: String, elem: String) -> bool {
         data.contains(&elem)
     }
 
-    fn split_whitespace(data: String) -> Vec<String> {
+    async fn split_whitespace(data: String) -> Vec<String> {
         let mut v = Vec::new();
         for s in data.split_whitespace() {
             v.push(s.to_owned());
@@ -17,40 +16,20 @@ impl StrService {
         v
     }
 
-    fn foo(data: i32) -> i32 {
+    async fn foo(data: i32) -> i32 {
         5 + data
     }
 
-    fn bar(data: i32) -> i32 {
+    async fn bar(data: i32) -> i32 {
         6 + data
     }
 
-    fn no_args() -> String {
+    async fn no_args() -> String {
         String::new()
     }
 }
 
-#[srpc::service(route = "num-service")]
 struct NumService;
-
-#[srpc::service_impl]
-impl NumService {
-    fn max(a: i32, b: i32) -> i32 {
-        if a > b {
-            a
-        } else {
-            b
-        }
-    }
-
-    fn factorial(n: u32) -> u32 {
-        match n {
-            0 => 1,
-            1 => 1,
-            n => n * NumService::factorial(n - 1),
-        }
-    }
-}
 
 #[tokio::main]
 async fn main() {
