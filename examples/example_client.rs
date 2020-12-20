@@ -1,7 +1,7 @@
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4};
 
 use srpc::transport::Transport;
-use srpc::{client_::Client, json_rpc::Request};
+use srpc::{client::Client, json_rpc::Request};
 use std::convert::TryFrom;
 
 //#[srpc::client(route = "str-service")]
@@ -28,7 +28,6 @@ async fn main() {
     let msg = "
         {
             \"jsonrpc\": \"2.0\",
-            \"route\": \"test\",
             \"method\": \"foo\",
             \"params\": { \"data\": 1 },
             \"id\": 1
@@ -45,7 +44,6 @@ async fn main() {
     let mut r3 = Request::try_from(msg.as_bytes()).unwrap();
     let mut r4 = Request::try_from(msg.as_bytes()).unwrap();
     let mut r5 = Request::try_from(msg.as_bytes()).unwrap();
-    r2.method = String::from("bar");
 
     let f1 = client.call(r1);
     let f2 = client.call(r2);

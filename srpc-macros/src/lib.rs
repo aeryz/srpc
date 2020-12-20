@@ -130,7 +130,7 @@ pub fn client(attrs: TokenStream, input: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_attribute]
-pub fn service_impl(_attrs: TokenStream, input: TokenStream) -> TokenStream {
+pub fn service(_attrs: TokenStream, input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as syn::ItemImpl);
     let self_ident = &input.self_ty;
     let match_arms = input.items.iter().map(|item| {
@@ -194,14 +194,18 @@ pub fn service_impl(_attrs: TokenStream, input: TokenStream) -> TokenStream {
     });
     let q = quote! {
         #input
-        impl srpc::server::Service for #self_ident {
+        impl #self_ident {
             async fn call(fn_name: String, args: serde_json::Value) -> srpc::Result<serde_json::Value> {
-                let ret_str = match fn_name.as_str() {
+                let ret_val = match fn_name.as_str() {
                     #(#match_arms,)*
                     _ => return Err(String::new().into())
                 };
 
-                Ok(ret_str)
+                Ok(ret_val)
+            }
+
+            fn caller(fn_name: String, args: serde_json::Value) -> Pin<Box<dyn Future<Output = srpc::Result<serde_json::Value>> + Send>> {
+                Box::pin(Self::call(fn_name, args))
             }
         }
     };

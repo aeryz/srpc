@@ -2,46 +2,48 @@ use super::transport::Transport;
 use super::Result;
 use crate::json_rpc::*;
 use crate::transport::Reader;
-use crate::utils;
-use async_trait::async_trait;
 use futures::stream::StreamExt;
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use tokio::io::{self, AsyncWrite};
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::Arc;
+use tokio::io;
 use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
 use tokio::sync::mpsc;
 
-/// This trait is auto-implemented by the 'service_impl' macro.
-#[async_trait]
-pub trait Service {
-    /// Calls the appropriate rpc function and returns its value as `serde_json::Value`
-    ///
-    /// # Errors
-    /// TODO
-    async fn call(fn_name: String, args: serde_json::Value) -> Result<serde_json::Value>;
-}
+type ServiceCall = fn(
+    String,
+    serde_json::Value,
+) -> Pin<Box<dyn Future<Output = Result<serde_json::Value>> + Send>>;
 
-pub struct Server<S> {
-    service: S,
+pub struct Server {
+    service_call: ServiceCall,
     transport: Arc<Transport>,
 }
 
-impl<S> Server<S>
-where
-    S: Service + Send + Sync + 'static,
-{
-    pub fn new(service: S) -> Self {
+impl Server {
+    pub fn new(service_call: ServiceCall) -> Self {
         Self {
-            service,
+            service_call,
             transport: Arc::new(Transport::new()),
         }
     }
 
-    pub fn set_service(&mut self, service: S) {
-        self.service = service;
+    pub fn set_service(&mut self, service_call: ServiceCall) {
+        self.service_call = service_call;
     }
 
-    async fn handle_request(self: Arc<Self>, request: Request, sender: mpsc::Sender<Vec<u8>>) {}
+    async fn handle_request(self: Arc<Self>, request: Request, sender: mpsc::Sender<Vec<u8>>) {
+        let value: Vec<u8> = match (self.service_call)(request.method, request.params).await {
+            Ok(result) => Response::new_result(result, request.id.unwrap()),
+            Err(_) => Response::new_error(ErrorKind::MethodNotFound, None, request.id.unwrap()),
+        }
+        .into();
+
+        let mut response = Vec::from(value.len().to_le_bytes());
+        response.extend(value);
+
+        let _ = sender.send(response).await;
+    }
 
     async fn handle_connection(self: Arc<Self>, stream: TcpStream) {
         let (read_half, write_half) = io::split(stream);

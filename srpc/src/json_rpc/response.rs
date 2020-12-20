@@ -38,3 +38,9 @@ impl TryFrom<&[u8]> for Response {
         serde_json::from_slice::<Response>(data)
     }
 }
+
+impl Into<Vec<u8>> for Response {
+    fn into(self) -> Vec<u8> {
+        serde_json::to_vec(&self).unwrap()
+    }
+}

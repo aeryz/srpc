@@ -54,6 +54,7 @@ impl Transport {
 
     async fn writer(mut receiver: mpsc::Receiver<Vec<u8>>, mut writer: WriteHalf<TcpStream>) {
         while let Some(data) = receiver.recv().await {
+            println!("Will write");
             let mut start_pos = 0;
             let data_len = data.len();
             while let Ok(n) = writer.write(&data[start_pos..data_len]).await {

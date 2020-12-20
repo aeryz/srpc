@@ -44,7 +44,7 @@ where
                         println!("Poll: Ok() None");
                         return Poll::Ready(None);
                     }
-                    println!("Poll: Ok()");
+                    println!("Poll: Ok() {}", buf.filled().len());
                     self_ref.codec.extend(buf.filled());
                     if let Some(Ok(data)) = self_ref.codec.drain() {
                         return Poll::Ready(Some(Ok(data)));

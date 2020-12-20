@@ -5,55 +5,36 @@ struct StrService;
 
 #[srpc_macros::service]
 impl StrService {
-    fn contains(data: String, elem: String) -> bool {
+    async fn contains(data: String, elem: String) -> bool {
         data.contains(&elem)
     }
 
-    fn split_whitespace(data: String) -> Vec<String> {
-        //data.split_whitespace().collect::<Vec<String>>()
-        Vec::new()
+    async fn split_whitespace(data: String) -> Vec<String> {
+        let mut v = Vec::new();
+        for s in data.split_whitespace() {
+            v.push(s.to_owned());
+        }
+        v
     }
 
-    fn foo() {
-        println!("Hgeloo");
+    async fn foo(data: i32) -> i32 {
+        5 + data
     }
 
-    fn bar() -> () {
-        println!("asd");
+    async fn bar(data: i32) -> i32 {
+        6 + data
     }
 
-    fn no_args() -> String {
+    async fn no_args() -> String {
         String::new()
     }
 }
 
-/*
-//#[route = "num-service"]
 struct NumService;
-
-#[srpc::service]
-impl NumService {
-    fn max(a: i32, b: i32) -> i32 {
-        if a > b { a } else { b }
-    }
-
-    fn factorial(n: u32) -> u32 {
-        match n {
-            1 => 1,
-            2 => 1,
-            n => n * NumService::factorial(n - 1)
-        }
-    }
-}
-*/
 
 fn main() {
     /*
-    let server = Server::new(8080);
-    server.serve(StrService::new());
-    // or
-    server.add_service(StrService::new());
-    server.add_service(NumService::new());
-    server.serve();
+    let mut server = Server::new(StrService);
+    server.serve("127.0.0.1:8080").await;
     */
 }
