@@ -25,6 +25,15 @@ impl TryFrom<&[u8]> for Request {
 }
 
 impl Request {
+    pub fn new(method: String, params: Value, id: Option<Id>) -> Self {
+        Self {
+            jsonrpc: Version::V2,
+            method,
+            params,
+            id,
+        }
+    }
+
     pub fn new_call(method: String, params: Value, id: Id) -> Self {
         Self {
             jsonrpc: Version::V2,
