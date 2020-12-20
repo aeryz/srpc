@@ -23,15 +23,8 @@ fn parse_route(mut attrs: syn::AttributeArgs) -> syn::LitStr {
 }
 
 #[proc_macro_attribute]
-pub fn client(attrs: TokenStream, input: TokenStream) -> TokenStream {
-    let attrs = parse_macro_input!(attrs as syn::AttributeArgs);
+pub fn client(_attrs: TokenStream, input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as syn::ItemTrait);
-
-    if attrs.len() != 1 {
-        panic!("Expected 'route' attribute only. eg/ #[srpc::client(route = \"cool_route\")]");
-    }
-
-    let route_name = parse_route(attrs);
 
     let self_ident = &input.ident;
     let methods = input.items.iter().map(|item| {
@@ -54,60 +47,57 @@ pub fn client(attrs: TokenStream, input: TokenStream) -> TokenStream {
 
             if method_args.is_empty() && return_type.is_none() {
                 quote! {
-                    fn #method_ident(client: &mut srpc::client::Client) -> srpc::Result<()> {
-                        let response: srpc::protocol::SrpcResponse<()> = serde_json::from_slice(&client.call(
-                                srpc::protocol::SrpcRequest::new(
+                    async fn #method_ident(client: &mut srpc::client::Client) -> srpc::Result<()> {
+                        let response: srpc::json_rpc::Response = serde_json::from_slice(&client.call(
+                                srpc::json_rpc::Request::new_call(
                                     "str-service", 
                                     stringify!(#method_ident), 
-                                    ()
-                                ))?)?;
-                        let _ = srpc::utils::throw_if_error(response.status_code)?;
+                                    serde_json::Value::Null,
+                                    srpc::json_rpc::Id::Num(0)
+                                )).await?)?;
                         Ok(())
                     }
                 }
             } else if method_args.is_empty() && return_type.is_some() {
                 let ret_type = return_type.unwrap();
                 quote! {
-                    fn #method_ident(client: &mut srpc::client::Client) -> srpc::Result<#ret_type> {
-                        let response: srpc::protocol::SrpcResponse<#ret_type> = serde_json::from_slice(&client.call(
-                                    srpc::protocol::SrpcRequest::new(
-                                        "str-service", 
+                    async fn #method_ident(client: &mut srpc::client::Client) -> srpc::Result<#ret_type> {
+                        let response: srpc::json_rpc::Response = serde_json::from_slice(&client.call(
+                                    srpc::json_rpc::Request::new_call(
                                         stringify!(#method_ident), 
-                                        ()
-                                    ))?)?;
-                        let _ = srpc::utils::throw_if_error(response.status_code)?;
-                        Ok(response.data)
+                                        serde_json::Value::Null, srpc::json_rpc::Id::Num(0))).await?)?;
+                        let ret: #ret_type = serde_json::from_value(response.data);
+                        Ok(ret)
                     }
                 }
             } else if !method_args.is_empty() && return_type.is_none() {
                 quote! {
-                    fn #method_ident(client: &mut srpc::client::Client, #method_args) -> srpc::Result<()> {
+                    async fn #method_ident(client: &mut srpc::client::Client, #method_args) -> srpc::Result<()> {
                         #[derive(serde::Serialize)]
                         struct Args { #method_args }
-                        let response: srpc::protocol::SrpcResponse<()> = serde_json::from_slice(&client.call(
-                            srpc::protocol::SrpcRequest::new(
-                                "str-service", 
+                        let response: srpc::json_rpc::Response = serde_json::from_slice(&client.call(
+                            srpc::json_rpc::Request::new_call(
                                 stringify!(#method_ident), 
-                                Args { #(#param_names,)* }
-                            ))?)?;
-                        let _ = srpc::utils::throw_if_error(response.status_code)?;
+                                serde_json::to_value(Args { #(#param_names,)* }).unwrap(), 
+                                srpc::json_rpc::Id::Num(0)
+                            )).await?)?;
                         Ok(())
                     }
                 }
             } else {
                 let ret_type = return_type.unwrap();
                 quote! {
-                    fn #method_ident(client: &mut srpc::client::Client, #method_args) -> srpc::Result<#ret_type> {
+                    async fn #method_ident(client: &srpc::client::Client, #method_args) -> srpc::Result<#ret_type> {
                         #[derive(serde::Serialize)]
                         struct Args { #method_args }
-                        let response: srpc::protocol::SrpcResponse<#ret_type> = serde_json::from_slice(&client.call(
-                                srpc::protocol::SrpcRequest::new(
-                                        "str-service", 
-                                        stringify!(#method_ident), 
-                                        Args { #(#param_names,)* })
-                                )?)?;
-                        let _ = srpc::utils::throw_if_error(response.status_code)?;
-                        Ok(response.data)
+                        let response = client.call(
+                                srpc::json_rpc::Request::new_call(
+                                        String::from(stringify!(#method_ident)), 
+                                        serde_json::to_value(Args { #(#param_names,)* }).unwrap(),
+                                        srpc::json_rpc::Id::Num(0))
+                                ).await;
+                        let ret: #ret_type = serde_json::from_value(response.result.unwrap()).unwrap();
+                        Ok(ret)
                     }
                 }
             }
@@ -117,11 +107,8 @@ pub fn client(attrs: TokenStream, input: TokenStream) -> TokenStream {
     });
 
     let q = quote! {
-        struct #self_ident { route: &'static str }
+        struct #self_ident; 
         impl #self_ident {
-            pub fn new() -> Self {
-                Self { route: #route_name }
-            }
             #(#methods)*
         }
     };
@@ -204,7 +191,7 @@ pub fn service(_attrs: TokenStream, input: TokenStream) -> TokenStream {
                 Ok(ret_val)
             }
 
-            fn caller(fn_name: String, args: serde_json::Value) -> Pin<Box<dyn Future<Output = srpc::Result<serde_json::Value>> + Send>> {
+            fn caller(fn_name: String, args: serde_json::Value) -> std::pin::Pin<Box<dyn std::future::Future<Output = srpc::Result<serde_json::Value>> + Send>> {
                 Box::pin(Self::call(fn_name, args))
             }
         }

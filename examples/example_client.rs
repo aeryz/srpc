@@ -1,28 +1,29 @@
-use std::net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
+use srpc::client::Client;
 use srpc::transport::Transport;
-use srpc::{client::Client, json_rpc::Request};
-use std::convert::TryFrom;
 
-//#[srpc::client(route = "str-service")]
+#[srpc::client]
 trait StrService {
-    fn contains(data: String, elem: String) -> bool;
-
-    fn split_whitespace(data: String) -> Vec<String>;
-
-    fn foo();
-
-    fn bar(n: i32);
-}
-
-//#[srpc::client(route = "num-service")]
-trait NumService {
-    fn max(a: i32, b: i32) -> i32;
-
-    fn factorial(n: u32) -> u32;
+    async fn foo(data: i32) -> i32;
 }
 
 use std::sync::Arc;
+
+#[tokio::main]
+async fn main() {
+    let transporter = Arc::new(Transport::new());
+    let client = Client::new(
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
+        transporter.clone(),
+    );
+
+    for _ in 0..10000 {
+        println!("{}", StrService::foo(&client, 5).await.unwrap());
+    }
+}
+
+/*
 #[tokio::main]
 async fn main() {
     let msg = "
@@ -62,3 +63,4 @@ async fn main() {
     println!("{:?}", res);
     */
 }
+*/

@@ -29,21 +29,8 @@ impl StrService {
     }
 }
 
-struct NumService;
-
-async fn foo() -> i32 {
-    println!("asda");
-    rand::random::<i32>()
-}
-
-fn foo_wrap() -> Pin<Box<dyn Future<Output = i32>>> {
-    Box::pin(foo())
-}
-
-use std::future::Future;
-use std::pin::Pin;
 #[tokio::main]
 async fn main() {
-    let mut server = Server::new(StrService::caller);
+    let server = Server::new(StrService::caller);
     server.serve("127.0.0.1:8080").await;
 }

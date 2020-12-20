@@ -28,3 +28,8 @@ path = "trash.rs"
 [[example]]
 name = "codec"
 path = "simple_codec.rs"
+
+[[example]]
+name = "plan"
+path = "plan.rs"
+

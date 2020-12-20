@@ -1,36 +1,9 @@
 //use srpc::Server;
 
-//#[route = "str-service"]
-struct StrService;
-
-#[srpc_macros::service]
-impl StrService {
-    async fn contains(data: String, elem: String) -> bool {
-        data.contains(&elem)
-    }
-
-    async fn split_whitespace(data: String) -> Vec<String> {
-        let mut v = Vec::new();
-        for s in data.split_whitespace() {
-            v.push(s.to_owned());
-        }
-        v
-    }
-
-    async fn foo(data: i32) -> i32 {
-        5 + data
-    }
-
-    async fn bar(data: i32) -> i32 {
-        6 + data
-    }
-
-    async fn no_args() -> String {
-        String::new()
-    }
+#[srpc_macros::client]
+trait StrService {
+    fn foo(data: i32) -> i32;
 }
-
-struct NumService;
 
 fn main() {
     /*
