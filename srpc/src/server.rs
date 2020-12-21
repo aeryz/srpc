@@ -1,6 +1,32 @@
+/// The async RPC server, which serves an RPC service.
+///
+/// Logic is simple. For each connection, server spawns a connection handler.
+/// And the connection handler spawns a request handler for each request. Request
+/// handlers run the corresponding RPC method and send a Response.
+///
+/// # Example
+/// ```no_run
+///
+/// use srpc::server::Server;
+///
+/// struct MyService;
+///
+/// #[srpc::service]
+/// impl MyService {
+///     async fn contains(data: String, elem: String) -> bool {
+///         data.contains(&elem)
+///     }
+/// }
+///
+/// #[tokio::main]
+/// async fn main() {
+///     let server = Server::new(MyService::caller);
+///     server.serve("127.0.0.1:8080").await;
+/// }
+/// ```
 use {
-    super::{transport::Transport, Result},
-    crate::{json_rpc::*, transport::Reader},
+    super::transport::Transport,
+    crate::{json_rpc, transport::Reader},
     futures::stream::StreamExt,
     std::{future::Future, pin::Pin, sync::Arc},
     tokio::{
@@ -10,10 +36,11 @@ use {
     },
 };
 
+// An async function which returns an srpc::Result
 type ServiceCall = fn(
     String,
     serde_json::Value,
-) -> Pin<Box<dyn Future<Output = Result<serde_json::Value>> + Send>>;
+) -> Pin<Box<dyn Future<Output = crate::Result<serde_json::Value>> + Send>>;
 
 pub struct Server {
     service_call: ServiceCall,
@@ -32,22 +59,39 @@ impl Server {
         self.service_call = service_call;
     }
 
-    async fn handle_request(self: Arc<Self>, request: Request, sender: mpsc::Sender<Vec<u8>>) {
+    /// Calls the corresponding rpc method and sends the result via sender.
+    ///
+    /// If an RPC error occurs, the error is sent in the 'error' field of the response and the 'result' field is
+    /// set to 'None'.
+    /// Otherwise the 'error' field is set to 'None' and the 'result' field contains the return
+    /// value of the RPC method.
+    async fn handle_request(
+        self: Arc<Self>,
+        request: json_rpc::Request,
+        sender: mpsc::Sender<Vec<u8>>,
+    ) {
         let value: Vec<u8> = match (self.service_call)(request.method, request.params).await {
-            Ok(result) => Response::new_result(result, request.id.unwrap()),
-            Err(_) => Response::new_error(ErrorKind::MethodNotFound, None, request.id.unwrap()),
+            Ok(result) => json_rpc::Response::new_result(result, request.id.unwrap()),
+            Err(_) => json_rpc::Response::new_error(
+                json_rpc::ErrorKind::MethodNotFound,
+                None,
+                request.id.unwrap(),
+            ),
         }
         .into();
 
+        // TODO: Fix the unnecessary copy
         let mut response = Vec::from(value.len().to_le_bytes());
         response.extend(value);
 
         let _ = sender.send(response).await;
     }
 
+    /// Spawns an IO reader and an IO writer for the connection and spawns new tasks as new
+    /// requests come.
     async fn handle_connection(self: Arc<Self>, stream: TcpStream) {
         let (read_half, write_half) = io::split(stream);
-        let mut reader: Reader<Request, _> = Reader::new(read_half);
+        let mut reader: Reader<json_rpc::Request, _> = Reader::new(read_half);
         let sender = self.transport.spawn_writer(write_half);
 
         loop {
