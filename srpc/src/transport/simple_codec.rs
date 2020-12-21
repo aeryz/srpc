@@ -1,9 +1,12 @@
-use super::Result;
-use bytes::buf::{Buf, BufMut};
-use bytes::BytesMut;
-use serde::de::DeserializeOwned;
-use std::collections::VecDeque;
-use std::convert::TryInto;
+use {
+    super::Result,
+    bytes::{
+        buf::{Buf, BufMut},
+        BytesMut,
+    },
+    serde::de::DeserializeOwned,
+    std::{collections::VecDeque, convert::TryInto},
+};
 
 static HEADER_LEN: usize = 8;
 

@@ -1,11 +1,12 @@
-use super::json_rpc::*;
-use super::transport::*;
-use std::net::SocketAddr;
-use std::sync::Arc;
-use tokio::io;
-use tokio::net::TcpStream;
-use tokio::sync::Mutex;
-use tokio::sync::{mpsc, oneshot};
+use {
+    super::{json_rpc::*, transport::*},
+    std::{net::SocketAddr, sync::Arc},
+    tokio::{
+        io,
+        net::TcpStream,
+        sync::{mpsc, oneshot, Mutex},
+    },
+};
 
 pub struct Client {
     sender: Arc<Mutex<Option<mpsc::Sender<Vec<u8>>>>>,

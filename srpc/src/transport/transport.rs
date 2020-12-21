@@ -1,11 +1,19 @@
-use super::json_rpc::{self, Response};
-use super::Reader;
-use futures::StreamExt;
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use tokio::io::{AsyncWriteExt, ReadHalf, WriteHalf};
-use tokio::net::TcpStream;
-use tokio::sync::{mpsc, oneshot};
+use {
+    super::{
+        json_rpc::{self, Response},
+        Reader,
+    },
+    futures::StreamExt,
+    std::{
+        collections::HashMap,
+        sync::{Arc, Mutex},
+    },
+    tokio::{
+        io::{AsyncWriteExt, ReadHalf, WriteHalf},
+        net::TcpStream,
+        sync::{mpsc, oneshot},
+    },
+};
 
 type Receivers = HashMap<json_rpc::Id, oneshot::Sender<Response>>;
 

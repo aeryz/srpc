@@ -1,10 +1,13 @@
-use super::codec::SimpleCodec;
-use super::Result;
-use futures::stream::Stream;
-use serde::de::DeserializeOwned;
-use std::pin::Pin;
-use std::task::{Context, Poll};
-use tokio::io::{AsyncRead, ReadBuf};
+use {
+    super::{codec::SimpleCodec, Result},
+    futures::stream::Stream,
+    serde::de::DeserializeOwned,
+    std::{
+        pin::Pin,
+        task::{Context, Poll},
+    },
+    tokio::io::{AsyncRead, ReadBuf},
+};
 
 pub struct Reader<D, R> {
     codec: SimpleCodec<D>,
@@ -41,21 +44,17 @@ where
             match self_ref.reader.as_mut().poll_read(cx, &mut buf) {
                 Poll::Ready(Ok(_)) => {
                     if buf.filled().is_empty() {
-                        println!("Poll: Ok() None");
                         return Poll::Ready(None);
                     }
-                    println!("Poll: Ok() {}", buf.filled().len());
                     self_ref.codec.extend(buf.filled());
                     if let Some(Ok(data)) = self_ref.codec.drain() {
                         return Poll::Ready(Some(Ok(data)));
                     }
                 }
                 Poll::Ready(Err(e)) => {
-                    println!("Poll: Err(e)");
                     return Poll::Ready(Some(Err(e.into())));
                 }
                 Poll::Pending => {
-                    println!("Poll: Pending");
                     return Poll::Pending;
                 }
             }

@@ -1,7 +1,9 @@
-use super::*;
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use std::convert::TryFrom;
+use {
+    super::*,
+    serde::{Deserialize, Serialize},
+    serde_json::Value,
+    std::convert::TryFrom,
+};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

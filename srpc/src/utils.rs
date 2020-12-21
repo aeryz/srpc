@@ -1,11 +1,13 @@
-use crate::json_rpc::*;
-
-use super::Result;
-
-use std::sync::Arc;
-use tokio::io::{AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use tokio::sync::mpsc::{Receiver, Sender};
-use tokio::sync::Mutex;
+use {
+    super::Result,
+    crate::json_rpc::*,
+    std::sync::Arc,
+    tokio::{
+        io::{AsyncReadExt, AsyncWrite, AsyncWriteExt},
+        sync::mpsc::{Receiver, Sender},
+        sync::Mutex,
+    },
+};
 
 /// Reads data from a reader until error occurs, read size is 0 or "\n\r" is seen at the end
 /// of the read data.
