@@ -5,13 +5,12 @@ publish = false
 edition = "2018"
 
 [dev-dependencies]
-async-trait = "0.1.42"
-tokio = { version = "0.3.0", features = ["full"] }
+env_logger = "0.8"
+rand = "0.7"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 srpc = { version = "0.1", path = "../srpc" }
-bytes = "0.6"
-rand = "0.7"
+tokio = { version = "0.3.0", features = ["full"] }
 
 [[example]]
 name = "server"
@@ -20,16 +19,3 @@ path = "example_server.rs"
 [[example]]
 name = "client"
 path = "example_client.rs"
-
-[[example]]
-name = "t"
-path = "trash.rs"
-
-[[example]]
-name = "codec"
-path = "simple_codec.rs"
-
-[[example]]
-name = "plan"
-path = "plan.rs"
-

@@ -1,5 +1,5 @@
 use {
-    super::{json_rpc::*, transport::*},
+    super::{json_rpc, transport::*},
     std::{net::SocketAddr, sync::Arc},
     tokio::{
         io,
@@ -23,33 +23,38 @@ impl Client {
         }
     }
 
-    pub async fn handle_connection(&self) {
+    pub async fn handle_connection(&self) -> crate::Result<()> {
         let mut sender = self.sender.lock().await;
         if sender.is_some() {
-            return;
+            return Ok(());
         }
 
-        let connection = TcpStream::connect(self.service_addr).await.unwrap();
+        let connection = TcpStream::connect(self.service_addr).await?;
         let (read_half, write_half) = io::split(connection);
         self.transporter.spawn_reader(read_half);
         *sender = Some(self.transporter.spawn_writer(write_half));
+
+        Ok(())
     }
 
-    pub async fn call(&self, mut request: Request) -> Response {
-        self.handle_connection().await;
-        request.id = Some(Id::Num(rand::random::<u32>()));
-        let (tx, rx) = oneshot::channel::<Response>();
+    pub async fn call(&self, mut request: json_rpc::Request) -> crate::Result<json_rpc::Response> {
+        self.handle_connection().await?;
+        request.id = Some(json_rpc::Id::Num(rand::random::<u32>()));
+        let (tx, rx) = oneshot::channel::<json_rpc::Response>();
 
-        let mut res = Vec::new();
         let data_to_send = serde_json::to_vec(&request).unwrap();
-        res.extend(&data_to_send.len().to_le_bytes());
+        let mut res = Vec::from(data_to_send.len().to_le_bytes());
         res.extend(data_to_send);
 
         self.transporter
             .clone()
             .add_receiver(request.id.unwrap(), tx);
 
-        let _ = self.sender.lock().await.as_mut().unwrap().send(res).await;
-        rx.await.unwrap()
+        match self.sender.lock().await.as_mut() {
+            Some(sender) => sender.send(res).await?,
+            None => return Err(String::from("io error").into()),
+        }
+
+        Ok(rx.await?)
     }
 }

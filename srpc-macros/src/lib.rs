@@ -78,7 +78,7 @@ pub fn client(_attrs: TokenStream, input: TokenStream) -> TokenStream {
                             String::from(stringify!(#method_ident)),
                             serde_json::Value::Null,
                             None /* Id is handled in "client.call()" */
-                        )).await;
+                        )).await?;
 
                         Ok(())
                     }
@@ -94,7 +94,7 @@ pub fn client(_attrs: TokenStream, input: TokenStream) -> TokenStream {
                                 String::from(stringify!(#method_ident)),
                                 serde_json::Value::Null,
                                 None
-                            )).await;
+                            )).await?;
 
                         if response.error.is_some() {
                             Err(response.error.unwrap().into())
@@ -122,7 +122,7 @@ pub fn client(_attrs: TokenStream, input: TokenStream) -> TokenStream {
                                 String::from(stringify!(#method_ident)),
                                 serde_json::to_value(Args { #(#param_names,)* }).unwrap(),
                                 None
-                            )).await;
+                            )).await?;
 
                         Ok(())
                     }
@@ -141,7 +141,7 @@ pub fn client(_attrs: TokenStream, input: TokenStream) -> TokenStream {
                                 String::from(stringify!(#method_ident)),
                                 serde_json::to_value(Args { #(#param_names,)* }).unwrap(),
                                 None
-                            )).await;
+                            )).await?;
 
                         if response.error.is_some() {
                             Err(response.error.unwrap().into())

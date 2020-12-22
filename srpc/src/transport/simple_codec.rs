@@ -48,7 +48,6 @@ where
     }
 
     pub fn drain(&mut self) -> Option<Result<T>> {
-        println!("PARSED REQ LEN: {}", self.parsed_buf.len());
         self.parsed_buf.pop_front()
     }
 

@@ -70,6 +70,7 @@ impl Server {
         request: json_rpc::Request,
         sender: mpsc::Sender<Vec<u8>>,
     ) {
+        log::debug!("Handling the request with id: {:?}", request.id);
         let value: Vec<u8> = match (self.service_call)(request.method, request.params).await {
             Ok(result) => json_rpc::Response::new_result(result, request.id.unwrap()),
             Err(_) => json_rpc::Response::new_error(
@@ -90,6 +91,7 @@ impl Server {
     /// Spawns an IO reader and an IO writer for the connection and spawns new tasks as new
     /// requests come.
     async fn handle_connection(self: Arc<Self>, stream: TcpStream) {
+        log::debug!("Handling the connection from {:?}", stream.local_addr());
         let (read_half, write_half) = io::split(stream);
         let mut reader: Reader<json_rpc::Request, _> = Reader::new(read_half);
         let sender = self.transport.spawn_writer(write_half);
@@ -97,7 +99,6 @@ impl Server {
         loop {
             match reader.next().await {
                 Some(Ok(request)) => {
-                    println!("Spawning a task to handle the request");
                     let sender_clone = sender.clone();
                     let self_clone = self.clone();
                     tokio::spawn(async move {
@@ -105,7 +106,7 @@ impl Server {
                     });
                 }
                 Some(Err(e)) => {
-                    println!("Error occured during handling connection: {}", e);
+                    log::error!("Error occured during handling connection: {}", e);
                 }
                 None => break,
             }
