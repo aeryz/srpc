@@ -61,3 +61,17 @@ where
         }
     }
 }
+
+mod tests {
+    #[test]
+    fn arbitrary() {
+        // Generates random bytes and sends them to the reader in arbitrary lengths.
+        unimplemented!()
+    }
+
+    #[test]
+    fn zero_length_body() {
+        // Tests if sending header with a length of zero breaks the reader.
+        // Zero-header should be sent in the beginning, in the end and somewhere between them.
+    }
+}
