@@ -15,7 +15,7 @@ pub struct Response {
 }
 
 impl Response {
-    pub fn new_error(kind: ErrorKind, data: Option<Value>, id: Id) -> Self {
+    pub fn from_error_data(kind: ErrorKind, data: Option<Value>, id: Id) -> Self {
         Response {
             jsonrpc: Version::V2,
             result: None,
@@ -24,11 +24,20 @@ impl Response {
         }
     }
 
-    pub fn new_result(result: Value, id: Id) -> Self {
+    pub fn from_result(result: Value, id: Id) -> Self {
         Response {
             jsonrpc: Version::V2,
             result: Some(result),
             error: None,
+            id,
+        }
+    }
+
+    pub fn from_error(error: Error, id: Id) -> Self {
+        Response {
+            jsonrpc: Version::V2,
+            result: None,
+            error: Some(error),
             id,
         }
     }

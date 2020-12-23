@@ -21,7 +21,7 @@
 /// #[tokio::main]
 /// async fn main() {
 ///     let server = Server::new(MyService::caller);
-///     server.serve("127.0.0.1:8080").await;
+///     let _ = server.serve("127.0.0.1:8080").await;
 /// }
 /// ```
 use {
@@ -37,10 +37,11 @@ use {
 };
 
 // An async function which returns an srpc::Result
-type ServiceCall = fn(
-    String,
-    serde_json::Value,
-) -> Pin<Box<dyn Future<Output = crate::Result<serde_json::Value>> + Send>>;
+type ServiceCall =
+    fn(
+        String,
+        serde_json::Value,
+    ) -> Pin<Box<dyn Future<Output = Result<serde_json::Value, json_rpc::Error>> + Send>>;
 
 pub struct Server {
     service_call: ServiceCall,
@@ -59,10 +60,11 @@ impl Server {
         self.service_call = service_call;
     }
 
-    /// Calls the corresponding rpc method and sends the result via sender.
+    /// Calls the corresponding rpc method and sends the result via sender. If the request is a
+    /// notification, no data is sent back.
     ///
-    /// If an RPC error occurs, the error is sent in the 'error' field of the response and the 'result' field is
-    /// set to 'None'.
+    /// If an RPC error occurs, the error is sent in the 'error' field of the response and the
+    /// 'result' field is set to 'None'.
     /// Otherwise the 'error' field is set to 'None' and the 'result' field contains the return
     /// value of the RPC method.
     async fn handle_request(
@@ -72,12 +74,14 @@ impl Server {
     ) {
         log::debug!("Handling the request with id: {:?}", request.id);
         let value: Vec<u8> = match (self.service_call)(request.method, request.params).await {
-            Ok(result) => json_rpc::Response::new_result(result, request.id.unwrap()),
-            Err(_) => json_rpc::Response::new_error(
-                json_rpc::ErrorKind::MethodNotFound,
-                None,
-                request.id.unwrap(),
-            ),
+            Ok(result) => match request.id {
+                Some(id) => json_rpc::Response::from_result(result, id),
+                None => return,
+            },
+            Err(err) => match request.id {
+                Some(id) => json_rpc::Response::from_error(err, id),
+                None => return,
+            },
         }
         .into();
 
@@ -107,6 +111,7 @@ impl Server {
                 }
                 Some(Err(e)) => {
                     log::error!("Error occured during handling connection: {}", e);
+                    break;
                 }
                 None => break,
             }
@@ -116,12 +121,12 @@ impl Server {
     /// Serves services from a TcpStream for now, it should accept all kind of type
     /// which implements the Stream trait and the other necessary traits.
     /// When a new connection is accepted, it spawns a task to handle that connection.
-    pub async fn serve<A: ToSocketAddrs>(self, addr: A) {
-        let listener = TcpListener::bind(addr).await.unwrap();
+    pub async fn serve<A: ToSocketAddrs>(self, addr: A) -> crate::Result<()> {
+        let listener = TcpListener::bind(addr).await?;
 
         let arc_self = Arc::new(self);
         loop {
-            let (stream, _) = listener.accept().await.unwrap();
+            let (stream, _) = listener.accept().await?;
             let self_clone = arc_self.clone();
             tokio::spawn(async move { self_clone.handle_connection(stream).await });
         }

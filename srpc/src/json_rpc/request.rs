@@ -35,22 +35,4 @@ impl Request {
             id,
         }
     }
-
-    pub fn new_call(method: String, params: Value, id: Id) -> Self {
-        Self {
-            jsonrpc: Version::V2,
-            method,
-            params,
-            id: Some(id),
-        }
-    }
-
-    pub fn new_notif(method: String, params: Value) -> Self {
-        Self {
-            jsonrpc: Version::V2,
-            method,
-            params,
-            id: None,
-        }
-    }
 }

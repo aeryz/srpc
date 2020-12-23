@@ -47,6 +47,17 @@ pub fn client(_attrs: TokenStream, input: TokenStream) -> TokenStream {
     let self_ident = &input.ident;
     let methods = input.items.iter().map(|item| {
         if let syn::TraitItem::Method(item_method) = item {
+            let mut is_notif = false;
+            if !item_method.attrs.is_empty() {
+                for attr in &item_method.attrs {
+                    if let Some(segment) = attr.path.segments.first() {
+                        if segment.ident == "notification" && attr.path.segments.len() == 1 {
+                            is_notif = true;
+                            break;
+                        }
+                    }
+                }
+            }
             let method_args = &item_method.sig.inputs;
             let method_ident = &item_method.sig.ident;
 
@@ -68,17 +79,26 @@ pub fn client(_attrs: TokenStream, input: TokenStream) -> TokenStream {
                 None
             };
 
+            if is_notif && return_type.is_some() {
+                panic!("Notification functions should return ()");
+            }
+
             if method_args.is_empty() && return_type.is_none() {
                 quote! {
-                    async fn #method_ident(client: &mut srpc::client::Client)
+                    async fn #method_ident(client: &srpc::client::Client)
                         -> srpc::Result<()> {
 
-                        let response = client.call(
-                            srpc::json_rpc::Request::new_call(
+                        let request = srpc::json_rpc::Request::new(
                             String::from(stringify!(#method_ident)),
                             serde_json::Value::Null,
                             None /* Id is handled in "client.call()" */
-                        )).await?;
+                        );
+
+                        if #is_notif {
+                            let _ = client.notify(request).await?;
+                        } else {
+                            let _ = client.call(request).await?;
+                        }
 
                         Ok(())
                     }
@@ -86,11 +106,9 @@ pub fn client(_attrs: TokenStream, input: TokenStream) -> TokenStream {
             } else if method_args.is_empty() && return_type.is_some() {
                 let ret_type = return_type.unwrap();
                 quote! {
-                    async fn #method_ident(client: &mut srpc::client::Client)
+                    async fn #method_ident(client: &srpc::client::Client)
                         -> srpc::Result<#ret_type> {
-
-                        let response = client.call(
-                            srpc::json_rpc::Request::new_call(
+                        let response = client.call(srpc::json_rpc::Request::new(
                                 String::from(stringify!(#method_ident)),
                                 serde_json::Value::Null,
                                 None
@@ -111,18 +129,23 @@ pub fn client(_attrs: TokenStream, input: TokenStream) -> TokenStream {
                 }
             } else if !method_args.is_empty() && return_type.is_none() {
                 quote! {
-                    async fn #method_ident(client: &mut srpc::client::Client, #method_args)
+                    async fn #method_ident(client: &srpc::client::Client, #method_args)
                         -> srpc::Result<()> {
 
                         #[derive(serde::Serialize)]
                         struct Args { #method_args }
 
-                        let response = client.call(
-                            srpc::json_rpc::Request::new(
-                                String::from(stringify!(#method_ident)),
-                                serde_json::to_value(Args { #(#param_names,)* }).unwrap(),
-                                None
-                            )).await?;
+                        let request = srpc::json_rpc::Request::new(
+                            String::from(stringify!(#method_ident)),
+                            serde_json::to_value(Args { #(#param_names,)* }).unwrap(),
+                            None
+                        );
+
+                        if #is_notif {
+                            let _ = client.notify(request).await?;
+                        } else {
+                            let _ = client.call(request).await?;
+                        }
 
                         Ok(())
                     }
@@ -257,7 +280,7 @@ pub fn service(_attrs: TokenStream, input: TokenStream) -> TokenStream {
             } else if method_args.is_empty() && return_type.is_some() {
                 quote! {
                     stringify!(#method_ident) => {
-                        serde_json::to_value(&#self_ident::#method_ident().await)?
+                        serde_json::to_value(&#self_ident::#method_ident().await).unwrap()
                     }
                 }
             } else if !method_args.is_empty() && return_type.is_none() {
@@ -266,7 +289,12 @@ pub fn service(_attrs: TokenStream, input: TokenStream) -> TokenStream {
                     stringify!(#method_ident) => {
                         #[derive(serde::Deserialize)]
                         struct Args { #method_args };
-                        let Args { #(#param_names,)* } = serde_json::from_value(args)?;
+                        let Args { #(#param_names,)* } = match serde_json::from_value(args) {
+                            Ok(args) => args,
+                            Err(e) => return Err(srpc::json_rpc::Error::new(
+                                                srpc::json_rpc::ErrorKind::InvalidParams,
+                                                Some(serde_json::to_value(e.to_string()).unwrap()))),
+                        };
                         #self_ident::#method_ident(#(#param_names_clone,)*).await;
                         serde_json::Value::Null
                     }
@@ -277,8 +305,13 @@ pub fn service(_attrs: TokenStream, input: TokenStream) -> TokenStream {
                     stringify!(#method_ident) => {
                         #[derive(serde::Deserialize)]
                         struct Args { #method_args };
-                        let Args { #(#param_names,)* } = serde_json::from_value(args)?;
-                        serde_json::to_value(&#self_ident::#method_ident(#(#param_names_clone,)*).await)?
+                        let Args { #(#param_names,)* } = match serde_json::from_value(args) {
+                            Ok(args) => args,
+                            Err(e) => return Err(srpc::json_rpc::Error::new(
+                                                srpc::json_rpc::ErrorKind::InvalidParams,
+                                                Some(serde_json::to_value(e.to_string()).unwrap())))
+                        };
+                        serde_json::to_value(&#self_ident::#method_ident(#(#param_names_clone,)*).await).unwrap()
                     }
                 }
             }
@@ -289,15 +322,15 @@ pub fn service(_attrs: TokenStream, input: TokenStream) -> TokenStream {
     let q = quote! {
         #input
         impl #self_ident {
-            async fn call(fn_name: String, args: serde_json::Value) -> srpc::Result<serde_json::Value> {
+            async fn call(fn_name: String, args: serde_json::Value) -> std::result::Result<serde_json::Value, srpc::json_rpc::Error> {
                 Ok(match fn_name.as_str() {
                     #(#match_arms,)*
-                    _ => return Err(String::new().into())
+                    _ => return Err(srpc::json_rpc::Error::new(srpc::json_rpc::ErrorKind::MethodNotFound, None)),
                 })
             }
 
             fn caller(fn_name: String, args: serde_json::Value)
-                -> std::pin::Pin<Box<dyn std::future::Future<Output = srpc::Result<serde_json::Value>> + Send>> {
+                -> std::pin::Pin<Box<dyn std::future::Future<Output = std::result::Result<serde_json::Value, srpc::json_rpc::Error>> + Send>> {
 
                 Box::pin(Self::call(fn_name, args))
 

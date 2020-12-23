@@ -6,6 +6,9 @@ use srpc::transport::Transport;
 #[srpc::client]
 trait StrService {
     async fn contains(data: String, elem: String) -> bool;
+
+    #[notification]
+    async fn set_data(is_cool: bool);
 }
 
 use std::sync::Arc;
@@ -19,7 +22,8 @@ async fn main() {
         transporter.clone(),
     );
 
-    for _ in 0..100 {
+    for i in 0..100 {
+        let _ = StrService::set_data(&client, i % 2 == 0).await;
         println!(
             "{}",
             StrService::contains(&client, String::from("cool lib"), String::from("lib"))

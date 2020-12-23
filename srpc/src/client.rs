@@ -39,7 +39,9 @@ impl Client {
 
     pub async fn call(&self, mut request: json_rpc::Request) -> crate::Result<json_rpc::Response> {
         self.handle_connection().await?;
+
         request.id = Some(json_rpc::Id::Num(rand::random::<u32>()));
+
         let (tx, rx) = oneshot::channel::<json_rpc::Response>();
 
         let data_to_send = serde_json::to_vec(&request).unwrap();
@@ -56,5 +58,20 @@ impl Client {
         }
 
         Ok(rx.await?)
+    }
+
+    pub async fn notify(&self, request: json_rpc::Request) -> crate::Result<()> {
+        self.handle_connection().await?;
+
+        let data_to_send = serde_json::to_vec(&request).unwrap();
+        let mut res = Vec::from(data_to_send.len().to_le_bytes());
+        res.extend(data_to_send);
+
+        match self.sender.lock().await.as_mut() {
+            Some(sender) => sender.send(res).await?,
+            None => return Err(String::from("io error").into()),
+        }
+
+        Ok(())
     }
 }
