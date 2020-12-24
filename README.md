@@ -57,7 +57,7 @@ async fn main() {
          transporter.clone(),
      );
           
-     let _ = StrService::set_data(&client, i % 2 == 0).await;
+     let _ = StrService::set_data(&client, true).await;
      let res = StrService::contains(&client, String::from("cool lib"), String::from("lib"))
                  .await
                  .unwrap();
