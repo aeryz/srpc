@@ -71,13 +71,16 @@ pub fn client(_attrs: TokenStream, input: TokenStream) -> TokenStream {
                 }
             });
 
-            // This can be tricked with a return type like '-> ()'. But it doesn't have an impact
-            // on the outcome.
-            let return_type = if let syn::ReturnType::Type(_, ret_type) = &item_method.sig.output {
-                Some(ret_type)
-            } else {
-                None
-            };
+            let mut return_type = None;
+            if let syn::ReturnType::Type(_, ret_type) = &item_method.sig.output {
+                if let syn::Type::Tuple(tuple) = ret_type.as_ref() {
+                    if !tuple.elems.is_empty() {
+                        return_type = Some(ret_type);
+                    }
+                } else {
+                    return_type = Some(ret_type);
+                }
+            }
 
             if is_notif && return_type.is_some() {
                 panic!("Notification functions should return ()");
@@ -262,12 +265,16 @@ pub fn service(_attrs: TokenStream, input: TokenStream) -> TokenStream {
                 }
             });
 
-            // Not that this can be tricked by '-> ()'. But it doesn't change the outcome.
-            let return_type = if let syn::ReturnType::Type(_, ret_type) = &item_method.sig.output {
-                Some(ret_type)
-            } else {
-                None
-            };
+            let mut return_type = None;
+            if let syn::ReturnType::Type(_, ret_type) = &item_method.sig.output {
+                if let syn::Type::Tuple(tuple) = ret_type.as_ref() {
+                    if !tuple.elems.is_empty() {
+                        return_type = Some(ret_type);
+                    }
+                } else {
+                    return_type = Some(ret_type);
+                }
+            }
 
             // Generating the match arms
             if method_args.is_empty() && return_type.is_none() {

@@ -1,7 +1,10 @@
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-
-use srpc::client::Client;
-use srpc::transport::Transport;
+use {
+    srpc::{client::Client, transport::Transport},
+    std::{
+        net::{IpAddr, Ipv4Addr, SocketAddr},
+        sync::Arc,
+    },
+};
 
 #[srpc::client]
 trait StrService {
@@ -10,8 +13,6 @@ trait StrService {
     #[notification]
     async fn set_data(is_cool: bool);
 }
-
-use std::sync::Arc;
 
 #[tokio::main]
 async fn main() {
