@@ -1,5 +1,5 @@
 use {
-    super::{json_rpc, Reader},
+    super::{codec, json_rpc, Reader},
     futures::StreamExt,
     log::{error, info, warn},
     std::{
@@ -51,7 +51,7 @@ impl Transport {
         loop {
             let next = reader.next().await;
             match next {
-                Some(Ok(data)) => {
+                Some(Ok(codec::Type::Single(data))) => {
                     let sender = {
                         let mut receivers = receivers.lock().unwrap();
                         receivers.remove(&data.id)
@@ -61,6 +61,9 @@ impl Transport {
                     } else {
                         warn!("Response came with an unexpected identifier. Ignoring.");
                     }
+                }
+                Some(Ok(codec::Type::Batched(_))) => {
+                    panic!("Client does not support batched requests yet.");
                 }
                 Some(Err(e)) => {
                     error!("IO error occured during reading: {}", e);

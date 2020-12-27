@@ -1,5 +1,8 @@
 use {
-    super::{codec::SimpleCodec, Result},
+    super::{
+        codec::{self, SimpleCodec},
+        Result,
+    },
     futures::stream::Stream,
     serde::de::DeserializeOwned,
     std::{
@@ -32,7 +35,7 @@ where
     D: DeserializeOwned,
     R: AsyncRead + Unpin,
 {
-    type Item = Result<D>;
+    type Item = Result<codec::Type<D>>;
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let self_ref = unsafe { &mut self.get_unchecked_mut() };
         if let Some(Ok(data)) = self_ref.codec.drain() {

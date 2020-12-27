@@ -26,7 +26,10 @@
 /// ```
 use {
     super::transport::Transport,
-    crate::{json_rpc, transport::Reader},
+    crate::{
+        json_rpc,
+        transport::{codec, Reader},
+    },
     futures::stream::StreamExt,
     std::{future::Future, pin::Pin, sync::Arc},
     tokio::{
@@ -60,6 +63,59 @@ impl Server {
         self.service_call = service_call;
     }
 
+    async fn handle_single_request(
+        self: &Arc<Self>,
+        request: json_rpc::Request,
+        sender: mpsc::Sender<Vec<u8>>,
+    ) {
+        if let Some(id) = request.id {
+            let value: Vec<u8> = match (self.service_call)(request.method, request.params).await {
+                Ok(result) => json_rpc::Response::from_result(result, id),
+                Err(err) => json_rpc::Response::from_error(err, id),
+            }
+            .into();
+
+            let mut response = Vec::from(value.len().to_le_bytes());
+            response.extend(value);
+            let _ = sender.send(response).await;
+        } else {
+            let _ = (self.service_call)(request.method, request.params).await;
+        }
+    }
+
+    async fn handle_batched_request(
+        self: &Arc<Self>,
+        requests: Vec<json_rpc::Request>,
+        sender: mpsc::Sender<Vec<u8>>,
+    ) {
+        let mut response = vec![0, 0, 0, 0, 0, 0, 0, 0, b'['];
+        for request in requests {
+            if let Some(id) = request.id {
+                let value: Vec<u8> =
+                    match (self.service_call)(request.method, request.params).await {
+                        Ok(result) => json_rpc::Response::from_result(result, id),
+                        Err(err) => json_rpc::Response::from_error(err, id),
+                    }
+                    .into();
+                response.extend(value);
+                response.push(b',');
+            } else {
+                let _ = (self.service_call)(request.method, request.params).await;
+            }
+        }
+        if response.len() != 9 {
+            (response.len() - 8)
+                .to_le_bytes()
+                .iter()
+                .enumerate()
+                .for_each(|(i, b)| response[i] = *b);
+            response.pop();
+        }
+        response.push(b']');
+
+        let _ = sender.send(response).await;
+    }
+
     /// Calls the corresponding rpc method and sends the result via sender. If the request is a
     /// notification, no data is sent back.
     ///
@@ -69,27 +125,13 @@ impl Server {
     /// value of the RPC method.
     async fn handle_request(
         self: Arc<Self>,
-        request: json_rpc::Request,
+        request: codec::Type<json_rpc::Request>,
         sender: mpsc::Sender<Vec<u8>>,
     ) {
-        log::debug!("Handling the request with id: {:?}", request.id);
-        let value: Vec<u8> = match (self.service_call)(request.method, request.params).await {
-            Ok(result) => match request.id {
-                Some(id) => json_rpc::Response::from_result(result, id),
-                None => return,
-            },
-            Err(err) => match request.id {
-                Some(id) => json_rpc::Response::from_error(err, id),
-                None => return,
-            },
-        }
-        .into();
-
-        // TODO: Fix the unnecessary copy
-        let mut response = Vec::from(value.len().to_le_bytes());
-        response.extend(value);
-
-        let _ = sender.send(response).await;
+        match request {
+            codec::Type::Single(request) => self.handle_single_request(request, sender).await,
+            codec::Type::Batched(requests) => self.handle_batched_request(requests, sender).await,
+        };
     }
 
     /// Spawns an IO reader and an IO writer for the connection and spawns new tasks as new

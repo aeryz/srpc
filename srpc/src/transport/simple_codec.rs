@@ -5,6 +5,7 @@ use {
         BytesMut,
     },
     serde::de::DeserializeOwned,
+    serde::Deserialize,
     std::{collections::VecDeque, convert::TryInto},
 };
 
@@ -16,9 +17,16 @@ enum State {
     OnBody(usize),
 }
 
+#[derive(Deserialize)]
+#[serde(untagged)]
+pub enum Type<T> {
+    Single(T),
+    Batched(Vec<T>),
+}
+
 pub struct SimpleCodec<T> {
     bytes: BytesMut,
-    parsed_buf: VecDeque<Result<T>>,
+    parsed_buf: VecDeque<Result<Type<T>>>,
 
     state: State,
 }
@@ -47,7 +55,7 @@ where
         }
     }
 
-    pub fn drain(&mut self) -> Option<Result<T>> {
+    pub fn drain(&mut self) -> Option<Result<Type<T>>> {
         self.parsed_buf.pop_front()
     }
 
@@ -66,10 +74,14 @@ where
             if self.bytes.len() < len + HEADER_LEN {
                 return None;
             }
+
             self.parsed_buf.push_back(
-                serde_json::from_slice::<T>(&self.bytes.as_ref()[HEADER_LEN..HEADER_LEN + len])
-                    .map_err(|e| e.into()),
+                serde_json::from_slice::<Type<T>>(
+                    &self.bytes.as_ref()[HEADER_LEN..HEADER_LEN + len],
+                )
+                .map_err(|e| e.into()),
             );
+
             self.state = State::OnHeader;
             self.bytes.advance(HEADER_LEN + len);
             return Some(());
