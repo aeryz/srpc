@@ -9,7 +9,7 @@ use {
     std::{collections::VecDeque, convert::TryInto},
 };
 
-static HEADER_LEN: usize = 8;
+pub static HEADER_LEN: usize = std::mem::size_of::<u32>();
 
 #[derive(Debug)]
 enum State {
@@ -63,9 +63,9 @@ where
         if self.bytes.len() < HEADER_LEN {
             return None;
         }
-        self.state = State::OnBody(usize::from_le_bytes(
+        self.state = State::OnBody(u32::from_le_bytes(
             (&self.bytes.as_ref()[0..HEADER_LEN]).try_into().unwrap(),
-        ));
+        ) as usize);
         self.parse_body()
     }
 

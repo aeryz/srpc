@@ -75,7 +75,10 @@ impl Server {
             }
             .into();
 
-            let mut response = Vec::from(value.len().to_le_bytes());
+            if value.len() > std::u32::MAX as usize {
+                panic!("maximum response size is exceeded");
+            }
+            let mut response = Vec::from((value.len() as u32).to_le_bytes());
             response.extend(value);
             let _ = sender.send(response).await;
         } else {
@@ -88,7 +91,8 @@ impl Server {
         requests: Vec<json_rpc::Request>,
         sender: mpsc::Sender<Vec<u8>>,
     ) {
-        let mut response = vec![0, 0, 0, 0, 0, 0, 0, 0, b'['];
+        let mut response = vec![0; codec::HEADER_LEN];
+        response.push(b'[');
         for request in requests {
             if let Some(id) = request.id {
                 let value: Vec<u8> =
@@ -103,8 +107,11 @@ impl Server {
                 let _ = (self.service_call)(request.method, request.params).await;
             }
         }
-        if response.len() != 9 {
-            (response.len() - 8)
+        if response.len() != codec::HEADER_LEN + 1 {
+            if response.len() - codec::HEADER_LEN > u32::MAX as usize {
+                panic!("maximum response size is exceeded");
+            }
+            ((response.len() - codec::HEADER_LEN) as u32)
                 .to_le_bytes()
                 .iter()
                 .enumerate()

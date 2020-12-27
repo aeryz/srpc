@@ -37,6 +37,17 @@ impl Client {
         Ok(())
     }
 
+    pub fn create_data(&self, request: &json_rpc::Request) -> crate::Result<Vec<u8>> {
+        let data_to_send = serde_json::to_vec(&request).unwrap();
+        if data_to_send.len() > std::u32::MAX as usize {
+            Err(format!("max data size ({}) is exceeded.", std::u32::MAX).into())
+        } else {
+            let mut res = Vec::from((data_to_send.len() as u32).to_le_bytes());
+            res.extend(data_to_send);
+            Ok(res)
+        }
+    }
+
     pub async fn call(&self, mut request: json_rpc::Request) -> crate::Result<json_rpc::Response> {
         self.handle_connection().await?;
 
@@ -44,9 +55,7 @@ impl Client {
 
         let (tx, rx) = oneshot::channel::<json_rpc::Response>();
 
-        let data_to_send = serde_json::to_vec(&request).unwrap();
-        let mut res = Vec::from(data_to_send.len().to_le_bytes());
-        res.extend(data_to_send);
+        let res = self.create_data(&request)?;
 
         self.transporter
             .clone()
@@ -63,9 +72,7 @@ impl Client {
     pub async fn notify(&self, request: json_rpc::Request) -> crate::Result<()> {
         self.handle_connection().await?;
 
-        let data_to_send = serde_json::to_vec(&request).unwrap();
-        let mut res = Vec::from(data_to_send.len().to_le_bytes());
-        res.extend(data_to_send);
+        let res = self.create_data(&request)?;
 
         match self.sender.lock().await.as_mut() {
             Some(sender) => sender.send(res).await?,
