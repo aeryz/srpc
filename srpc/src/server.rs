@@ -71,17 +71,16 @@ impl Server {
         sender: mpsc::Sender<Vec<u8>>,
     ) {
         if let Some(id) = request.id {
-            let value: Vec<u8> = match (self.service_call)(request.method, request.params).await {
+            let response: Vec<u8> = match (self.service_call)(request.method, request.params).await
+            {
                 Ok(result) => json_rpc::Response::from_result(result, id),
                 Err(err) => json_rpc::Response::from_error(err, id),
             }
             .into();
 
-            if value.len() > std::u32::MAX as usize {
+            if response.len() > std::u32::MAX as usize {
                 panic!("maximum response size is exceeded");
             }
-            let mut response = Vec::from((value.len() as u32).to_le_bytes());
-            response.extend(value);
             let _ = sender.send(response).await;
         } else {
             let _ = (self.service_call)(request.method, request.params).await;
@@ -96,8 +95,7 @@ impl Server {
         requests: Vec<json_rpc::Request>,
         sender: mpsc::Sender<Vec<u8>>,
     ) {
-        let mut response = vec![0; codec::HEADER_LEN];
-        response.push(b'[');
+        let mut response = vec![b'['];
         for request in requests {
             if let Some(id) = request.id {
                 let value: Vec<u8> =
@@ -112,15 +110,10 @@ impl Server {
                 let _ = (self.service_call)(request.method, request.params).await;
             }
         }
-        if response.len() != codec::HEADER_LEN + 1 {
-            if response.len() - codec::HEADER_LEN > u32::MAX as usize {
+        if response.len() != 1 {
+            if response.len() > u32::MAX as usize {
                 panic!("maximum response size is exceeded");
             }
-            ((response.len() - codec::HEADER_LEN) as u32)
-                .to_le_bytes()
-                .iter()
-                .enumerate()
-                .for_each(|(i, b)| response[i] = *b);
             response.pop();
         }
         response.push(b']');

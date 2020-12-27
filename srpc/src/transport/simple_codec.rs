@@ -66,24 +66,23 @@ where
         self.state = State::OnBody(u32::from_le_bytes(
             (&self.bytes.as_ref()[0..HEADER_LEN]).try_into().unwrap(),
         ) as usize);
+        self.bytes.advance(HEADER_LEN);
         self.parse_body()
     }
 
     fn parse_body(&mut self) -> Option<()> {
         if let State::OnBody(len) = self.state {
-            if self.bytes.len() < len + HEADER_LEN {
+            if self.bytes.len() < len {
                 return None;
             }
 
             self.parsed_buf.push_back(
-                serde_json::from_slice::<Type<T>>(
-                    &self.bytes.as_ref()[HEADER_LEN..HEADER_LEN + len],
-                )
-                .map_err(|e| e.into()),
+                serde_json::from_slice::<Type<T>>(&self.bytes.as_ref()[..len])
+                    .map_err(|e| e.into()),
             );
 
             self.state = State::OnHeader;
-            self.bytes.advance(HEADER_LEN + len);
+            self.bytes.advance(len);
             return Some(());
         }
         unreachable!();

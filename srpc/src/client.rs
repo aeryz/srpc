@@ -42,9 +42,7 @@ impl Client {
         if data_to_send.len() > std::u32::MAX as usize {
             Err(format!("max data size ({}) is exceeded.", std::u32::MAX).into())
         } else {
-            let mut res = Vec::from((data_to_send.len() as u32).to_le_bytes());
-            res.extend(data_to_send);
-            Ok(res)
+            Ok(data_to_send)
         }
     }
 
@@ -65,7 +63,6 @@ impl Client {
             Some(sender) => sender.send(res).await?,
             None => return Err(String::from("io error").into()),
         }
-
         Ok(rx.await?)
     }
 
@@ -78,7 +75,6 @@ impl Client {
             Some(sender) => sender.send(res).await?,
             None => return Err(String::from("io error").into()),
         }
-
         Ok(())
     }
 }

@@ -77,23 +77,29 @@ impl Transport {
         }
     }
 
+    async fn write_buf(
+        writer: &mut WriteHalf<TcpStream>,
+        buffer: &[u8],
+    ) -> Result<(), std::io::Error> {
+        let mut start_pos = 0;
+        loop {
+            let n = writer.write(&buffer[start_pos..]).await?;
+            if n == 0 {
+                return Ok(());
+            }
+            start_pos += n;
+        }
+    }
+
     async fn writer(mut receiver: mpsc::Receiver<Vec<u8>>, mut writer: WriteHalf<TcpStream>) {
         while let Some(data) = receiver.recv().await {
-            let mut start_pos = 0;
-            let data_len = data.len();
-            loop {
-                match writer.write(&data[start_pos..data_len]).await {
-                    Ok(n) => {
-                        if n == 0 {
-                            break;
-                        }
-                        start_pos += n;
-                    }
-                    Err(e) => {
-                        error!("IO error occured while writing {}", e);
-                        break;
-                    }
-                }
+            if let Err(e) =
+                Transport::write_buf(&mut writer, &(data.len() as u32).to_le_bytes()).await
+            {
+                log::error!("error occured during writing data {}", e);
+            }
+            if let Err(e) = Transport::write_buf(&mut writer, &data[..]).await {
+                log::error!("error occured during writing data {}", e);
             }
         }
     }
