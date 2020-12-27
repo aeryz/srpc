@@ -63,6 +63,8 @@ impl Server {
         self.service_call = service_call;
     }
 
+    /// Calls the corresponding rpc method and sends the result via sender. If the request is a
+    /// notification, no data is sent back.
     async fn handle_single_request(
         self: &Arc<Self>,
         request: json_rpc::Request,
@@ -86,6 +88,9 @@ impl Server {
         }
     }
 
+    /// Calls the corresponding rpc method for each request and sends the results of each
+    /// non-notification RPC call at once, as an array. It sends back an empty array, if all requests are
+    /// notifications.
     async fn handle_batched_request(
         self: &Arc<Self>,
         requests: Vec<json_rpc::Request>,
@@ -123,8 +128,7 @@ impl Server {
         let _ = sender.send(response).await;
     }
 
-    /// Calls the corresponding rpc method and sends the result via sender. If the request is a
-    /// notification, no data is sent back.
+    /// Calls the appropriate request handler
     ///
     /// If an RPC error occurs, the error is sent in the 'error' field of the response and the
     /// 'result' field is set to 'None'.
