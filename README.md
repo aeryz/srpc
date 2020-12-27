@@ -75,7 +75,7 @@ async fn main() {
 # Future Releases
 - Batched requests on the client side (0.2.0)
 - Blocking annotation for blocking RPC methods (0.2.0)
-- Future agnostic (0.3.0)
+- Executor agnostic (0.3.0)
 - Data framing over TCP (0.3.0)
 - JSON-RPC 1.0 (after 0.3.0)
 
