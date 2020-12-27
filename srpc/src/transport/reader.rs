@@ -42,8 +42,8 @@ where
             return Poll::Ready(Some(Ok(data)));
         }
         let mut buffer = [0 as u8; 1024];
-        let mut buf = ReadBuf::new(&mut buffer);
         loop {
+            let mut buf = ReadBuf::new(&mut buffer);
             match self_ref.reader.as_mut().poll_read(cx, &mut buf) {
                 Poll::Ready(Ok(_)) => {
                     if buf.filled().is_empty() {
