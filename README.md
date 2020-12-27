@@ -65,5 +65,19 @@ async fn main() {
  }
 ```
 
+# Current Version Supports (0.1.0)
+- JSON-RPC 2.0
+- Persistent connection
+- Batched requests on the server side
+- Asyncronous RPC methods
+- Tokio as runtime
+
+# Future Releases
+- Batched requests on the client side (0.2.0)
+- Blocking annotation for blocking RPC methods (0.2.0)
+- Executor agnostic (0.3.0)
+- Data framing over TCP (0.3.0)
+- JSON-RPC 1.0 (after 0.3.0)
+
 # Contribution
 I don't have a contribution guideline yet, so feel free to go to issues, pick one and send a PR :) Easy ones are marked with "good first issue" label.
