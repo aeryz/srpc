@@ -259,11 +259,38 @@ pub fn service(_attrs: TokenStream, input: TokenStream) -> TokenStream {
             let param_names = method_args.iter().map(|param| {
                 if let syn::FnArg::Typed(param) = param {
                     // Get the identifier of the parameter
-                    &param.pat
+                    if let syn::Pat::Ident(ref param_ident) = *param.pat {
+                        if param_ident.ident == "self" {
+                            None
+                        } else {
+                            Some(&param.pat)
+                        }
+                    }
+                    else {
+                        panic!("Unexpected ident");
+                    }
                 } else {
-                    panic!("Using 'self' in an RPC call is not allowed for now.");
+                    panic!("'self' can only be used in format 'self: Arc<Self>' in an RPC call is not allowed for now.");
                 }
-            });
+            }).filter(|param| param.is_some());
+
+            let args = method_args.iter().map(|param| {
+                if let syn::FnArg::Typed(param) = param {
+                    // Get the identifier of the parameter
+                    if let syn::Pat::Ident(ref param_ident) = *param.pat {
+                        if param_ident.ident == "self" {
+                            None
+                        } else {
+                            Some(param)
+                        }
+                    }
+                    else {
+                        panic!("Unexpected ident");
+                    }
+                } else {
+                    panic!("'self' can only be used in format 'self: Arc<Self>' in an RPC call is not allowed for now.");
+                }
+            }).filter(|param| param.is_some());
 
             let mut return_type = None;
             if let syn::ReturnType::Type(_, ret_type) = &item_method.sig.output {
@@ -280,14 +307,14 @@ pub fn service(_attrs: TokenStream, input: TokenStream) -> TokenStream {
             if method_args.is_empty() && return_type.is_none() {
                 quote! {
                     stringify!(#method_ident) => {
-                        #self_ident::#method_ident();
+                        #self_ident::#method_ident(self);
                         serde_json::Value::Null
                     }
                 }
             } else if method_args.is_empty() && return_type.is_some() {
                 quote! {
                     stringify!(#method_ident) => {
-                        serde_json::to_value(&#self_ident::#method_ident().await).unwrap()
+                        serde_json::to_value(&#self_ident::#method_ident(self).await).unwrap()
                     }
                 }
             } else if !method_args.is_empty() && return_type.is_none() {
@@ -295,14 +322,14 @@ pub fn service(_attrs: TokenStream, input: TokenStream) -> TokenStream {
                 quote! {
                     stringify!(#method_ident) => {
                         #[derive(serde::Deserialize)]
-                        struct Args { #method_args };
+                        struct Args { #(#args,)* };
                         let Args { #(#param_names,)* } = match serde_json::from_value(args) {
                             Ok(args) => args,
                             Err(e) => return Err(srpc::json_rpc::Error::new(
                                                 srpc::json_rpc::ErrorKind::InvalidParams,
                                                 Some(serde_json::to_value(e.to_string()).unwrap()))),
                         };
-                        #self_ident::#method_ident(#(#param_names_clone,)*).await;
+                        #self_ident::#method_ident(self, #(#param_names_clone,)*).await;
                         serde_json::Value::Null
                     }
                 }
@@ -311,14 +338,14 @@ pub fn service(_attrs: TokenStream, input: TokenStream) -> TokenStream {
                 quote! {
                     stringify!(#method_ident) => {
                         #[derive(serde::Deserialize)]
-                        struct Args { #method_args };
+                        struct Args { #(#args,)* };
                         let Args { #(#param_names,)* } = match serde_json::from_value(args) {
                             Ok(args) => args,
                             Err(e) => return Err(srpc::json_rpc::Error::new(
                                                 srpc::json_rpc::ErrorKind::InvalidParams,
                                                 Some(serde_json::to_value(e.to_string()).unwrap())))
                         };
-                        serde_json::to_value(&#self_ident::#method_ident(#(#param_names_clone,)*).await).unwrap()
+                        serde_json::to_value(&#self_ident::#method_ident(self, #(#param_names_clone,)*).await).unwrap()
                     }
                 }
             }
@@ -329,17 +356,17 @@ pub fn service(_attrs: TokenStream, input: TokenStream) -> TokenStream {
     let q = quote! {
         #input
         impl #self_ident {
-            async fn call(fn_name: String, args: serde_json::Value) -> std::result::Result<serde_json::Value, srpc::json_rpc::Error> {
+            async fn call(self: Arc<Self>, fn_name: String, args: serde_json::Value) -> std::result::Result<serde_json::Value, srpc::json_rpc::Error> {
                 Ok(match fn_name.as_str() {
                     #(#match_arms,)*
                     _ => return Err(srpc::json_rpc::Error::new(srpc::json_rpc::ErrorKind::MethodNotFound, None)),
                 })
             }
 
-            fn caller(fn_name: String, args: serde_json::Value)
+            fn caller(self: Arc<Self>, fn_name: String, args: serde_json::Value)
                 -> std::pin::Pin<Box<dyn std::future::Future<Output = std::result::Result<serde_json::Value, srpc::json_rpc::Error>> + Send>> {
 
-                Box::pin(Self::call(fn_name, args))
+                Box::pin(self.call(fn_name, args))
 
             }
         }

@@ -40,26 +40,33 @@ use {
 };
 
 // An async function which returns an srpc::Result
-type ServiceCall =
+type ServiceCall<T> =
     fn(
+        Arc<T>,
         String,
         serde_json::Value,
     ) -> Pin<Box<dyn Future<Output = Result<serde_json::Value, json_rpc::Error>> + Send>>;
 
-pub struct Server {
-    service_call: ServiceCall,
+pub struct Server<T> {
+    service: Arc<T>,
+    service_call: ServiceCall<T>,
     transport: Arc<Transport>,
 }
 
-impl Server {
-    pub fn new(service_call: ServiceCall) -> Self {
+impl<T> Server<T>
+where
+    T: 'static + Send + Sync,
+{
+    pub fn new(service: T, service_call: ServiceCall<T>) -> Self {
         Self {
+            service: Arc::new(service),
             service_call,
             transport: Arc::new(Transport::new()),
         }
     }
 
-    pub fn set_service(&mut self, service_call: ServiceCall) {
+    pub fn set_service(&mut self, service: T, service_call: ServiceCall<T>) {
+        self.service = Arc::new(service);
         self.service_call = service_call;
     }
 
@@ -71,19 +78,21 @@ impl Server {
         sender: mpsc::Sender<Vec<u8>>,
     ) {
         if let Some(id) = request.id {
-            let response: Vec<u8> = match (self.service_call)(request.method, request.params).await
-            {
-                Ok(result) => json_rpc::Response::from_result(result, id),
-                Err(err) => json_rpc::Response::from_error(err, id),
-            }
-            .into();
+            let response: Vec<u8> =
+                match (self.service_call)(self.service.clone(), request.method, request.params)
+                    .await
+                {
+                    Ok(result) => json_rpc::Response::from_result(result, id),
+                    Err(err) => json_rpc::Response::from_error(err, id),
+                }
+                .into();
 
             if response.len() > std::u32::MAX as usize {
                 panic!("maximum response size is exceeded");
             }
             let _ = sender.send(response).await;
         } else {
-            let _ = (self.service_call)(request.method, request.params).await;
+            let _ = (self.service_call)(self.service.clone(), request.method, request.params).await;
         }
     }
 
@@ -99,7 +108,9 @@ impl Server {
         for request in requests {
             if let Some(id) = request.id {
                 let value: Vec<u8> =
-                    match (self.service_call)(request.method, request.params).await {
+                    match (self.service_call)(self.service.clone(), request.method, request.params)
+                        .await
+                    {
                         Ok(result) => json_rpc::Response::from_result(result, id),
                         Err(err) => json_rpc::Response::from_error(err, id),
                     }
@@ -107,7 +118,8 @@ impl Server {
                 response.extend(value);
                 response.push(b',');
             } else {
-                let _ = (self.service_call)(request.method, request.params).await;
+                let _ =
+                    (self.service_call)(self.service.clone(), request.method, request.params).await;
             }
         }
         if response.len() != 1 {
