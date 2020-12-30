@@ -10,24 +10,29 @@ SRPC is in the early development phase.
 
 ```rust
 use srpc::server::Server;
+use std::sync::Arc;
 
-struct StrService;
+struct StrService {
+	// Some server data
+};
 
 #[srpc::service]
 impl StrService {
-    async fn contains(data: String, elem: String) -> bool {
+	// 'self' parameter is used as local server data. It is not transferred.
+    async fn contains(self: Arc<Self>, data: String, elem: String) -> bool {
         data.contains(&elem)
     }
 
-    async fn set_data(is_cool: bool) {
+    async fn set_data(self: Arc<Self>, is_cool: bool) {
         println!("Set a cool variable to: {}", is_cool);
     }
 }
 
 #[tokio::main]
 async fn main() {
-    let server = Server::new(StrService::caller);
+    let server = Server::new(StrService{ /* data */ }, StrService::caller);
     let _ = server.serve("127.0.0.1:8080").await;
+}
 ```
 
 ## Client side
