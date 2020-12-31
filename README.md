@@ -18,13 +18,16 @@ struct StrService {
 
 #[srpc::service]
 impl StrService {
-	// 'self' parameter is used as local server data. It is not transferred.
-    async fn contains(self: Arc<Self>, data: String, elem: String) -> bool {
-        data.contains(&elem)
+	// 'self' and 'context' params are reserved. They are not transferred.
+	// 'self' is used for local server data.
+	// 'context' contains address of the caller.
+	// Reserved params are optional.
+    async fn foo(self: Arc<Self>, context: Arc<Context>, x: i32, y: i32) -> i32 {
+    	x + y
     }
 
-    async fn set_data(self: Arc<Self>, is_cool: bool) {
-        println!("Set a cool variable to: {}", is_cool);
+    async fn bar(is_cool: bool) {
+        println!("Is cool? {}", is_cool);
     }
 }
 
@@ -48,10 +51,12 @@ async fn main() {
  #[srpc::client]
  trait StrService {
      // Define an RPC call, that expects and waits for a response.
-     async fn contains(data: String, elem: String) -> bool;
- 
-     #[notification] // Define an RPC notification that does not wait for a response.
-     async fn set_data(is_cool: bool);
+     // Note that reserved params does not exist in the client side.
+     async fn foo(x: i32, y: i32) -> i32;
+     
+     // Define an RPC notification that does not wait for a response.
+     #[notification] 
+     async fn bar(is_cool: bool);
  }
  
  #[tokio::main]
@@ -62,8 +67,8 @@ async fn main() {
          transporter.clone(),
      );
           
-     let _ = StrService::set_data(&client, true).await;
-     let res = StrService::contains(&client, String::from("cool lib"), String::from("lib"))
+     let _ = StrService::foo(&client, true).await;
+     let res = StrService::bar(&client, 3, 5)
                  .await
                  .unwrap();
      println!("{}", res);
