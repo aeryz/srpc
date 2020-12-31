@@ -31,7 +31,7 @@ use {
         transport::{codec, Reader},
     },
     futures::stream::StreamExt,
-    std::{future::Future, pin::Pin, sync::Arc},
+    std::{future::Future, net::SocketAddr, pin::Pin, sync::Arc},
     tokio::{
         io,
         net::{TcpListener, TcpStream, ToSocketAddrs},
@@ -43,9 +43,15 @@ use {
 type ServiceCall<T> =
     fn(
         Arc<T>,
+        Arc<Context>,
         String,
         serde_json::Value,
     ) -> Pin<Box<dyn Future<Output = Result<serde_json::Value, json_rpc::Error>> + Send>>;
+
+#[derive(Copy, Clone)]
+pub struct Context {
+    pub caller_addr: SocketAddr,
+}
 
 pub struct Server<T> {
     service: Arc<T>,
@@ -74,25 +80,36 @@ where
     /// notification, no data is sent back.
     async fn handle_single_request(
         self: &Arc<Self>,
+        context: Arc<Context>,
         request: json_rpc::Request,
         sender: mpsc::Sender<Vec<u8>>,
     ) {
         if let Some(id) = request.id {
-            let response: Vec<u8> =
-                match (self.service_call)(self.service.clone(), request.method, request.params)
-                    .await
-                {
-                    Ok(result) => json_rpc::Response::from_result(result, id),
-                    Err(err) => json_rpc::Response::from_error(err, id),
-                }
-                .into();
+            let response: Vec<u8> = match (self.service_call)(
+                self.service.clone(),
+                context,
+                request.method,
+                request.params,
+            )
+            .await
+            {
+                Ok(result) => json_rpc::Response::from_result(result, id),
+                Err(err) => json_rpc::Response::from_error(err, id),
+            }
+            .into();
 
             if response.len() > std::u32::MAX as usize {
                 panic!("maximum response size is exceeded");
             }
             let _ = sender.send(response).await;
         } else {
-            let _ = (self.service_call)(self.service.clone(), request.method, request.params).await;
+            let _ = (self.service_call)(
+                self.service.clone(),
+                context,
+                request.method,
+                request.params,
+            )
+            .await;
         }
     }
 
@@ -101,25 +118,35 @@ where
     /// notifications.
     async fn handle_batched_request(
         self: &Arc<Self>,
+        context: Arc<Context>,
         requests: Vec<json_rpc::Request>,
         sender: mpsc::Sender<Vec<u8>>,
     ) {
         let mut response = vec![b'['];
         for request in requests {
             if let Some(id) = request.id {
-                let value: Vec<u8> =
-                    match (self.service_call)(self.service.clone(), request.method, request.params)
-                        .await
-                    {
-                        Ok(result) => json_rpc::Response::from_result(result, id),
-                        Err(err) => json_rpc::Response::from_error(err, id),
-                    }
-                    .into();
+                let value: Vec<u8> = match (self.service_call)(
+                    self.service.clone(),
+                    context.clone(),
+                    request.method,
+                    request.params,
+                )
+                .await
+                {
+                    Ok(result) => json_rpc::Response::from_result(result, id),
+                    Err(err) => json_rpc::Response::from_error(err, id),
+                }
+                .into();
                 response.extend(value);
                 response.push(b',');
             } else {
-                let _ =
-                    (self.service_call)(self.service.clone(), request.method, request.params).await;
+                let _ = (self.service_call)(
+                    self.service.clone(),
+                    context.clone(),
+                    request.method,
+                    request.params,
+                )
+                .await;
             }
         }
         if response.len() != 1 {
@@ -141,30 +168,38 @@ where
     /// value of the RPC method.
     async fn handle_request(
         self: Arc<Self>,
+        context: Arc<Context>,
         request: codec::Type<json_rpc::Request>,
         sender: mpsc::Sender<Vec<u8>>,
     ) {
         match request {
-            codec::Type::Single(request) => self.handle_single_request(request, sender).await,
-            codec::Type::Batched(requests) => self.handle_batched_request(requests, sender).await,
+            codec::Type::Single(request) => {
+                self.handle_single_request(context, request, sender).await
+            }
+            codec::Type::Batched(requests) => {
+                self.handle_batched_request(context, requests, sender).await
+            }
         };
     }
 
     /// Spawns an IO reader and an IO writer for the connection and spawns new tasks as new
     /// requests come.
-    async fn handle_connection(self: Arc<Self>, stream: TcpStream) {
+    async fn handle_connection(self: Arc<Self>, stream: TcpStream, context: Context) {
         log::debug!("Handling the connection from {:?}", stream.local_addr());
         let (read_half, write_half) = io::split(stream);
         let mut reader: Reader<json_rpc::Request, _> = Reader::new(read_half);
         let sender = self.transport.spawn_writer(write_half);
+        let context = Arc::new(context);
 
         loop {
             match reader.next().await {
                 Some(Ok(request)) => {
                     let sender_clone = sender.clone();
                     let self_clone = self.clone();
+                    let context_clone = context.clone();
                     tokio::spawn(async move {
-                        Self::handle_request(self_clone, request, sender_clone).await;
+                        Self::handle_request(self_clone, context_clone, request, sender_clone)
+                            .await;
                     });
                 }
                 Some(Err(e)) => {
@@ -184,9 +219,10 @@ where
 
         let arc_self = Arc::new(self);
         loop {
-            let (stream, _) = listener.accept().await?;
+            let (stream, addr) = listener.accept().await?;
+            let context = Context { caller_addr: addr };
             let self_clone = arc_self.clone();
-            tokio::spawn(async move { self_clone.handle_connection(stream).await });
+            tokio::spawn(async move { self_clone.handle_connection(stream, context).await });
         }
     }
 }

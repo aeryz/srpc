@@ -253,6 +253,7 @@ pub fn service(_attrs: TokenStream, input: TokenStream) -> TokenStream {
         if let syn::ImplItem::Method(item_method) = item {
             let method_args = &item_method.sig.inputs;
             let method_ident = &item_method.sig.ident;
+            let method_block = &item_method.block;
 
             // We only get Typed parameters and ignore 'self' because there is no
             // point to have 'self' in the parameters and it also breaks the code.
@@ -260,7 +261,7 @@ pub fn service(_attrs: TokenStream, input: TokenStream) -> TokenStream {
                 if let syn::FnArg::Typed(param) = param {
                     // Get the identifier of the parameter
                     if let syn::Pat::Ident(ref param_ident) = *param.pat {
-                        if param_ident.ident == "self" {
+                        if param_ident.ident == "self" || param_ident.ident == "context" {
                             None
                         } else {
                             Some(&param.pat)
@@ -278,7 +279,7 @@ pub fn service(_attrs: TokenStream, input: TokenStream) -> TokenStream {
                 if let syn::FnArg::Typed(param) = param {
                     // Get the identifier of the parameter
                     if let syn::Pat::Ident(ref param_ident) = *param.pat {
-                        if param_ident.ident == "self" {
+                        if param_ident.ident == "self" || param_ident.ident == "context" {
                             None
                         } else {
                             Some(param)
@@ -307,18 +308,22 @@ pub fn service(_attrs: TokenStream, input: TokenStream) -> TokenStream {
             if method_args.is_empty() && return_type.is_none() {
                 quote! {
                     stringify!(#method_ident) => {
-                        #self_ident::#method_ident(self);
+                        
+                        async move { #method_block }.await;
+                        
                         serde_json::Value::Null
                     }
                 }
             } else if method_args.is_empty() && return_type.is_some() {
                 quote! {
                     stringify!(#method_ident) => {
-                        serde_json::to_value(&#self_ident::#method_ident(self).await).unwrap()
+                        
+                        serde_json::to_value(async move {
+                            #method_block
+                        }.await).unwrap()
                     }
                 }
             } else if !method_args.is_empty() && return_type.is_none() {
-                let param_names_clone = param_names.clone();
                 quote! {
                     stringify!(#method_ident) => {
                         #[derive(serde::Deserialize)]
@@ -329,12 +334,15 @@ pub fn service(_attrs: TokenStream, input: TokenStream) -> TokenStream {
                                                 srpc::json_rpc::ErrorKind::InvalidParams,
                                                 Some(serde_json::to_value(e.to_string()).unwrap()))),
                         };
-                        #self_ident::#method_ident(self, #(#param_names_clone,)*).await;
+                        
+                        async move {
+                            #method_block  
+                        }.await;
+                        
                         serde_json::Value::Null
                     }
                 }
             } else {
-                let param_names_clone = param_names.clone();
                 quote! {
                     stringify!(#method_ident) => {
                         #[derive(serde::Deserialize)]
@@ -345,7 +353,10 @@ pub fn service(_attrs: TokenStream, input: TokenStream) -> TokenStream {
                                                 srpc::json_rpc::ErrorKind::InvalidParams,
                                                 Some(serde_json::to_value(e.to_string()).unwrap())))
                         };
-                        serde_json::to_value(&#self_ident::#method_ident(self, #(#param_names_clone,)*).await).unwrap()
+                        
+                        serde_json::to_value(async move {
+                            #method_block
+                        }.await).unwrap()
                     }
                 }
             }
@@ -356,17 +367,25 @@ pub fn service(_attrs: TokenStream, input: TokenStream) -> TokenStream {
     let q = quote! {
         #input
         impl #self_ident {
-            async fn call(self: Arc<Self>, fn_name: String, args: serde_json::Value) -> std::result::Result<serde_json::Value, srpc::json_rpc::Error> {
+            async fn call(self: Arc<Self>,
+                          context: Arc<srpc::server::Context>,
+                          fn_name: String,
+                          args: serde_json::Value)
+                -> std::result::Result<serde_json::Value, srpc::json_rpc::Error> {
+
                 Ok(match fn_name.as_str() {
                     #(#match_arms,)*
                     _ => return Err(srpc::json_rpc::Error::new(srpc::json_rpc::ErrorKind::MethodNotFound, None)),
                 })
             }
 
-            fn caller(self: Arc<Self>, fn_name: String, args: serde_json::Value)
+            fn caller(self: Arc<Self>,
+                      context: Arc<srpc::server::Context>,
+                      fn_name: String,
+                      args: serde_json::Value)
                 -> std::pin::Pin<Box<dyn std::future::Future<Output = std::result::Result<serde_json::Value, srpc::json_rpc::Error>> + Send>> {
 
-                Box::pin(self.call(fn_name, args))
+                Box::pin(self.call(context, fn_name, args))
 
             }
         }

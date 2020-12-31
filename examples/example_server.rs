@@ -1,3 +1,4 @@
+use srpc::server::Context;
 use srpc::server::Server;
 use std::sync::Arc;
 
@@ -5,12 +6,13 @@ struct StrService;
 
 #[srpc::service]
 impl StrService {
-    async fn contains(self: Arc<Self>, data: String, elem: String) -> bool {
+    async fn contains(data: String, elem: String) -> bool {
         data.contains(&elem)
     }
 
-    async fn set_data(self: Arc<Self>, is_cool: bool) {
-        println!("Setted a cool variable to: {}", is_cool);
+    async fn set_data(context: Arc<Context>, is_cool: bool) {
+        println!("Socket {:?}", context.caller_addr);
+        println!("Set a cool variable to: {}", is_cool);
     }
 }
 
