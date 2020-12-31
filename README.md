@@ -13,15 +13,15 @@ use srpc::server::Server;
 use std::sync::Arc;
 
 struct StrService {
-	// Some server data
+    // Some server data
 };
 
 #[srpc::service]
 impl StrService {
-	// 'self' and 'context' params are reserved. They are not transferred.
-	// 'self' is used for local server data.
-	// 'context' contains address of the caller.
-	// Reserved params are optional.
+    // 'self' and 'context' params are reserved. They are not transferred.
+    // 'self' is used for local server data.
+    // 'context' contains address of the caller.
+    // Reserved params are optional.
     async fn foo(self: Arc<Self>, context: Arc<Context>, x: i32, y: i32) -> i32 {
     	x + y
     }
