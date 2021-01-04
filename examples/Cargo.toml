@@ -19,3 +19,11 @@ path = "example_server.rs"
 [[example]]
 name = "client"
 path = "example_client.rs"
+
+[[example]]
+name = "ts"
+path = "t_server.rs"
+
+[[example]]
+name = "tc"
+path = "t_client.rs"

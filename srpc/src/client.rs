@@ -53,14 +53,14 @@ impl Client {
 
         let (tx, rx) = oneshot::channel::<json_rpc::Response>();
 
-        let res = self.create_data(&request)?;
+        let req = self.create_data(&request)?;
 
         self.transporter
             .clone()
             .add_receiver(request.id.unwrap(), tx);
 
         match self.sender.lock().await.as_mut() {
-            Some(sender) => sender.send(res).await?,
+            Some(sender) => sender.send(req).await?,
             None => return Err(String::from("io error").into()),
         }
         Ok(rx.await?)

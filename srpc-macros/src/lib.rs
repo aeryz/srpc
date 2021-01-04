@@ -120,13 +120,9 @@ pub fn client(_attrs: TokenStream, input: TokenStream) -> TokenStream {
                         if response.error.is_some() {
                             Err(response.error.unwrap().into())
                         } else {
-                            if response.result.is_some() {
-                                Ok(serde_json::from_value(response.result.unwrap())?)
-                            } else {
-                                Err(srpc::json_rpc::Error::new(
-                                        srpc::json_rpc::ErrorKind::InternalError,
-                                        None).into())
-                            }
+                            Ok(serde_json::from_value(
+                                response.result.unwrap_or(serde_json::Value::Null)
+                            )?)
                         }
                     }
                 }
@@ -172,13 +168,9 @@ pub fn client(_attrs: TokenStream, input: TokenStream) -> TokenStream {
                         if response.error.is_some() {
                             Err(response.error.unwrap().into())
                         } else {
-                            if response.result.is_some() {
-                                Ok(serde_json::from_value(response.result.unwrap())?)
-                            } else {
-                                Err(srpc::json_rpc::Error::new(
-                                        srpc::json_rpc::ErrorKind::InternalError,
-                                        None).into())
-                            }
+                                Ok(serde_json::from_value(
+                                        response.result.unwrap_or(serde_json::Value::Null)
+                                        )?)
                         }
                     }
                 }
@@ -317,7 +309,6 @@ pub fn service(_attrs: TokenStream, input: TokenStream) -> TokenStream {
             } else if param_names.is_empty() && return_type.is_some() {
                 quote! {
                     stringify!(#method_ident) => {
-                        
                         serde_json::to_value(async move {
                             #method_block
                         }.await).unwrap()
