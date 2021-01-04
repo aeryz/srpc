@@ -257,14 +257,14 @@ pub fn service(_attrs: TokenStream, input: TokenStream) -> TokenStream {
 
             // We only get Typed parameters and ignore 'self' because there is no
             // point to have 'self' in the parameters and it also breaks the code.
-            let param_names = method_args.iter().map(|param| {
+            let mut param_names = Vec::new();
+            method_args.iter().for_each(|param| {
                 if let syn::FnArg::Typed(param) = param {
                     // Get the identifier of the parameter
                     if let syn::Pat::Ident(ref param_ident) = *param.pat {
                         if param_ident.ident == "self" || param_ident.ident == "context" {
-                            None
                         } else {
-                            Some(&param.pat)
+                            param_names.push(&param.pat);
                         }
                     }
                     else {
@@ -273,7 +273,7 @@ pub fn service(_attrs: TokenStream, input: TokenStream) -> TokenStream {
                 } else {
                     panic!("'self' can only be used in format 'self: Arc<Self>' in an RPC call is not allowed for now.");
                 }
-            }).filter(|param| param.is_some());
+            });
 
             let args = method_args.iter().map(|param| {
                 if let syn::FnArg::Typed(param) = param {
@@ -305,7 +305,7 @@ pub fn service(_attrs: TokenStream, input: TokenStream) -> TokenStream {
             }
 
             // Generating the match arms
-            if method_args.is_empty() && return_type.is_none() {
+            if param_names.is_empty() && return_type.is_none() {
                 quote! {
                     stringify!(#method_ident) => {
                         
@@ -314,7 +314,7 @@ pub fn service(_attrs: TokenStream, input: TokenStream) -> TokenStream {
                         serde_json::Value::Null
                     }
                 }
-            } else if method_args.is_empty() && return_type.is_some() {
+            } else if param_names.is_empty() && return_type.is_some() {
                 quote! {
                     stringify!(#method_ident) => {
                         
@@ -323,7 +323,7 @@ pub fn service(_attrs: TokenStream, input: TokenStream) -> TokenStream {
                         }.await).unwrap()
                     }
                 }
-            } else if !method_args.is_empty() && return_type.is_none() {
+            } else if !param_names.is_empty() && return_type.is_none() {
                 quote! {
                     stringify!(#method_ident) => {
                         #[derive(serde::Deserialize)]
