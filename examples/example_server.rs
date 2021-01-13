@@ -5,6 +5,7 @@ use std::sync::Arc;
 struct StrService;
 
 #[srpc::service]
+#[allow(unused)]
 impl StrService {
     async fn contains(data: String, elem: String) -> bool {
         data.contains(&elem)

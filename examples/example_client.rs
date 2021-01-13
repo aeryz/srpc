@@ -1,9 +1,6 @@
 use {
     srpc::{client::Client, transport::Transport},
-    std::{
-        net::{IpAddr, Ipv4Addr, SocketAddr},
-        sync::Arc,
-    },
+    std::sync::Arc,
 };
 
 #[srpc::client]
