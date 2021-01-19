@@ -2,7 +2,8 @@
 ///
 /// Logic is simple. For each connection, server spawns a connection handler.
 /// And the connection handler spawns a request handler for each request. Request
-/// handlers run the corresponding RPC method and send a Response.
+/// handlers run the corresponding RPC method and send a Response. Unless any error
+/// occurs related to connection, the server keeps the connection open.
 ///
 /// # Example
 /// ```no_run
@@ -101,8 +102,10 @@ where
             if response.len() > std::u32::MAX as usize {
                 panic!("maximum response size is exceeded");
             }
+            // TODO: Error handling
             let _ = sender.send(response).await;
         } else {
+            // We don't need to see the result of a notification
             let _ = (self.service_call)(
                 self.service.clone(),
                 context,
@@ -124,6 +127,7 @@ where
     ) {
         let mut response = vec![b'['];
         for request in requests {
+            // Is it a notification?
             if let Some(id) = request.id {
                 let value: Vec<u8> = match (self.service_call)(
                     self.service.clone(),
@@ -140,6 +144,7 @@ where
                 response.extend(value);
                 response.push(b',');
             } else {
+                // We don't need the result of a notification
                 let _ = (self.service_call)(
                     self.service.clone(),
                     context.clone(),
@@ -211,9 +216,11 @@ where
         }
     }
 
-    /// Serves services from a TcpStream for now, it should accept all kind of type
-    /// which implements the Stream trait and the other necessary traits.
+    /// Serves services from a TcpStream. 
     /// When a new connection is accepted, it spawns a task to handle that connection.
+    ///
+    /// TODO: Server is limited to TcpStream right now. It should be able to serve
+    ///       anything that implements Stream trait
     pub async fn serve<A: ToSocketAddrs>(self, addr: A) -> crate::Result<()> {
         let listener = TcpListener::bind(addr).await?;
 

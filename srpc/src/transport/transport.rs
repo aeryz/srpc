@@ -1,3 +1,8 @@
+///
+/// Transport handles the IO operations for both the client and the server.
+///
+/// TODO: We need some sort of garbage collection in here. Note that when a read operation
+/// fails, we keep storing the receiver.
 use {
     super::{codec, json_rpc, Reader},
     futures::StreamExt,
@@ -37,6 +42,7 @@ impl Transport {
         tx
     }
 
+    /// Registers a request to receivers
     pub fn add_receiver(
         self: Arc<Self>,
         id: json_rpc::Id,
@@ -46,6 +52,7 @@ impl Transport {
         self.receivers.lock().unwrap().insert(id, sender);
     }
 
+    /// Reads incoming data in a loop and forwards the data to the corresponding receiver.
     async fn reader(receivers: Arc<Mutex<Receivers>>, reader: ReadHalf<TcpStream>) {
         let mut reader: Reader<json_rpc::Response, _> = Reader::new(reader);
         loop {
@@ -91,6 +98,7 @@ impl Transport {
         }
     }
 
+    /// Waits for incoming data from the receiver writes the incoming data to the connection.
     async fn writer(mut receiver: mpsc::Receiver<Vec<u8>>, mut writer: WriteHalf<TcpStream>) {
         while let Some(data) = receiver.recv().await {
             if let Err(e) =
