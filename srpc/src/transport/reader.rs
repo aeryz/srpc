@@ -1,3 +1,6 @@
+//! Streamed reader
+//!
+
 use {
     super::{
         codec::{self, SimpleCodec},

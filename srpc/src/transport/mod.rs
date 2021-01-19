@@ -1,3 +1,5 @@
+//! IO handlers and codecs.
+
 pub mod reader;
 pub mod simple_codec;
 pub mod transport;

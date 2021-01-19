@@ -1,30 +1,62 @@
-/// The async RPC server, which serves an RPC service.
-///
-/// Logic is simple. For each connection, server spawns a connection handler.
-/// And the connection handler spawns a request handler for each request. Request
-/// handlers run the corresponding RPC method and send a Response. Unless any error
-/// occurs related to connection, the server keeps the connection open.
-///
-/// # Example
-/// ```no_run
-///
-/// use srpc::server::Server;
-///
-/// struct MyService;
-///
-/// #[srpc::service]
-/// impl MyService {
-///     async fn contains(data: String, elem: String) -> bool {
-///         data.contains(&elem)
-///     }
-/// }
-///
-/// #[tokio::main]
-/// async fn main() {
-///     let server = Server::new(MyService::caller);
-///     let _ = server.serve("127.0.0.1:8080").await;
-/// }
-/// ```
+//! The async RPC server.
+//!
+//! Logic is simple. For each connection, server spawns a connection handler.
+//! And the connection handler spawns a request handler for each request. Request
+//! handlers run the corresponding RPC method and send back a Response(if the request
+//! is not a notification). Unless any error occurs related to connection, the 
+//! server keeps the connection open.
+//!
+//! # Example
+//! ```no_run
+//! use srpc::server::Context;
+//! use srpc::server::Server;
+//! use std::sync::Arc;
+//!
+//! struct StrService;
+//!
+//! #[srpc::service]
+//! #[allow(unused)]
+//! impl StrService {
+//!    async fn contains(data: String, elem: String) -> bool {
+//!        data.contains(&elem)
+//!    }
+//!
+//!    async fn set_data(context: Arc<Context>, is_cool: bool) {
+//!        println!("Socket {:?}", context.caller_addr);
+//!        println!("Set a cool variable to: {}", is_cool);
+//!    }
+//! }
+//!
+//! #[tokio::main]
+//! async fn main() {
+//!     let server = Server::new(StrService, MyService::caller);
+//!     let _ = server.serve("127.0.0.1:8080").await;
+//! }
+//! ```
+//!
+//! # Reserved Parameters
+//! 
+//! Services might want to use some local data which is not sent to the client. Currently,
+//! there are two reserved parameters which are passed to the service method if they present
+//! in the function parameters.
+//! 
+//! ## Local server data
+//! Whenever shared server data is needed, this parameter can be used. SRPC passes the same data 
+//! to every method so the data is not copied. Users do not pay the cost comes with `Arc` if they
+//! don't use the parameter.
+//! ```no_run
+//! async fn foo(self: Arc<Self>) {}
+//! ```
+//!
+//! ## Context of the connection
+//! Server might wanna know where the connection comes from. In that case `context: Arc<Context>`
+//! is used. For now, [Context](struct.Context.html) is only contains the address of the connector
+//! client.
+//! ```no_run
+//! async fn foo(context: Arc<Context>) {}
+//! ```
+//! 
+//!
 use {
     super::transport::Transport,
     crate::{

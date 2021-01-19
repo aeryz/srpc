@@ -1,3 +1,8 @@
+//! JSON-RPC types and helper methods.
+//!
+//! Note that for now, only JSON-RPC version 2.0 is supported.
+//!
+
 mod errors;
 mod request;
 mod response;
