@@ -48,7 +48,7 @@ use {
 
 pub struct Client {
     // Sends data to writer
-    sender: Arc<Mutex<Option<mpsc::Sender<Vec<u8>>>>>,
+    sender: Arc<Mutex<Option<mpsc::UnboundedSender<Vec<u8>>>>>,
     service_addr: SocketAddr,
     transporter: Arc<Transport>,
 }
@@ -104,7 +104,7 @@ impl Client {
             .add_receiver(request.id.unwrap(), tx);
 
         match self.sender.lock().await.as_mut() {
-            Some(sender) => sender.send(req).await?,
+            Some(sender) => sender.send(req)?,
             None => return Err(String::from("io error").into()),
         }
         Ok(rx.await?)
@@ -117,7 +117,7 @@ impl Client {
         let res = self.create_data(&request)?;
 
         match self.sender.lock().await.as_mut() {
-            Some(sender) => sender.send(res).await?,
+            Some(sender) => sender.send(res)?,
             None => return Err(String::from("io error").into()),
         }
         Ok(())
