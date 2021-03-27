@@ -36,8 +36,8 @@ impl Transport {
         tokio::spawn(Transport::reader(receivers, reader));
     }
 
-    pub fn spawn_writer(self: &Arc<Self>, writer: WriteHalf<TcpStream>) -> mpsc::Sender<Vec<u8>> {
-        let (tx, rx) = mpsc::channel(32);
+    pub fn spawn_writer(self: &Arc<Self>, writer: WriteHalf<TcpStream>) -> mpsc::UnboundedSender<Vec<u8>> {
+        let (tx, rx) = mpsc::unbounded_channel();
         tokio::spawn(Transport::writer(rx, writer));
         tx
     }
@@ -99,7 +99,7 @@ impl Transport {
     }
 
     /// Waits for incoming data from the receiver writes the incoming data to the connection.
-    async fn writer(mut receiver: mpsc::Receiver<Vec<u8>>, mut writer: WriteHalf<TcpStream>) {
+    async fn writer(mut receiver: mpsc::UnboundedReceiver<Vec<u8>>, mut writer: WriteHalf<TcpStream>) {
         while let Some(data) = receiver.recv().await {
             if let Err(e) =
                 Transport::write_buf(&mut writer, &(data.len() as u32).to_le_bytes()).await

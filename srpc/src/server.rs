@@ -3,7 +3,7 @@
 //! Logic is simple. For each connection, server spawns a connection handler.
 //! And the connection handler spawns a request handler for each request. Request
 //! handlers run the corresponding RPC method and send back a Response(if the request
-//! is not a notification). Unless any error occurs related to connection, the 
+//! is not a notification). Unless any error occurs related to connection, the
 //! server keeps the connection open.
 //!
 //! # Example
@@ -35,13 +35,13 @@
 //! ```
 //!
 //! # Reserved Parameters
-//! 
+//!
 //! Services might want to use some local data which is not sent to the client. Currently,
 //! there are two reserved parameters which are passed to the service method if they present
 //! in the function parameters.
-//! 
+//!
 //! ## Local server data
-//! Whenever shared server data is needed, this parameter can be used. SRPC passes the same data 
+//! Whenever shared server data is needed, this parameter can be used. SRPC passes the same data
 //! to every method so the data is not copied. Users do not pay the cost comes with `Arc` if they
 //! don't use the parameter.
 //! ```no_run
@@ -55,7 +55,7 @@
 //! ```no_run
 //! async fn foo(context: Arc<Context>) {}
 //! ```
-//! 
+//!
 //!
 use {
     super::transport::Transport,
@@ -115,7 +115,7 @@ where
         self: &Arc<Self>,
         context: Arc<Context>,
         request: json_rpc::Request,
-        sender: mpsc::Sender<Vec<u8>>,
+        sender: mpsc::UnboundedSender<Vec<u8>>,
     ) {
         if let Some(id) = request.id {
             let response: Vec<u8> = match (self.service_call)(
@@ -135,7 +135,7 @@ where
                 panic!("maximum response size is exceeded");
             }
             // TODO: Error handling
-            let _ = sender.send(response).await;
+            let _ = sender.send(response);
         } else {
             // We don't need to see the result of a notification
             let _ = (self.service_call)(
@@ -155,7 +155,7 @@ where
         self: &Arc<Self>,
         context: Arc<Context>,
         requests: Vec<json_rpc::Request>,
-        sender: mpsc::Sender<Vec<u8>>,
+        sender: mpsc::UnboundedSender<Vec<u8>>,
     ) {
         let mut response = vec![b'['];
         for request in requests {
@@ -194,7 +194,7 @@ where
         }
         response.push(b']');
 
-        let _ = sender.send(response).await;
+        let _ = sender.send(response);
     }
 
     /// Calls the appropriate request handler
@@ -207,7 +207,7 @@ where
         self: Arc<Self>,
         context: Arc<Context>,
         request: codec::Type<json_rpc::Request>,
-        sender: mpsc::Sender<Vec<u8>>,
+        sender: mpsc::UnboundedSender<Vec<u8>>,
     ) {
         match request {
             codec::Type::Single(request) => {
@@ -248,7 +248,7 @@ where
         }
     }
 
-    /// Serves services from a TcpStream. 
+    /// Serves services from a TcpStream.
     /// When a new connection is accepted, it spawns a task to handle that connection.
     ///
     /// TODO: Server is limited to TcpStream right now. It should be able to serve
